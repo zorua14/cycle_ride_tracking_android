@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onNavigateToInsights: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -46,7 +46,7 @@ fun SettingsScreen() {
             )
         },
         bottomBar = {
-            SettingsNavigationBar()
+            SettingsNavigationBar(onNavigateToInsights)
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -171,58 +171,31 @@ fun ThemeDisplayCard() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectedThemeSelector(selected: String, onSelected: (String) -> Unit) {
     val options = listOf("System", "Light", "Dark")
-    val icons = listOf<ImageVector>(Icons.Default.Check, Icons.Default.WbSunny, Icons.Default.NightsStay)
+    val icons = listOf(Icons.Default.SettingsSuggest, Icons.Default.WbSunny, Icons.Default.NightsStay)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier.fillMaxWidth()
     ) {
         options.forEachIndexed { index, option ->
-            val isSelected = selected == option
-            val shape = when (index) {
-                0 -> RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
-                options.size - 1 -> RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
-                else -> RoundedCornerShape(0.dp)
-            }
-
-            val containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-
-            val contentColor = if (isSelected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-
-            Button(
+            SegmentedButton(
+                selected = selected == option,
                 onClick = { onSelected(option) },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                shape = shape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = containerColor,
-                    contentColor = contentColor
-                ),
-                contentPadding = PaddingValues(0.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if ((isSelected && index == 0)) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                    } else if (index > 0) {
-                        Icon(icons[index], contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                icon = {
+                    SegmentedButtonDefaults.Icon(active = selected == option) {
+                        Icon(
+                            imageVector = icons[index],
+                            contentDescription = null,
+                            modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
+                        )
                     }
-                    Text(option, style = MaterialTheme.typography.labelLarge)
                 }
+            ) {
+                Text(option, style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -370,7 +343,7 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
 }
 
 @Composable
-fun SettingsNavigationBar() {
+fun SettingsNavigationBar(onNavigateToInsights: () -> Unit) {
     var selectedItem by remember { mutableIntStateOf(3) }
     val items = listOf("Dashboard", "History", "Insights", "Settings")
     val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Default.Tune)
@@ -384,7 +357,10 @@ fun SettingsNavigationBar() {
                 icon = { Icon(icons[index], contentDescription = item) },
                 label = { Text(item) },
                 selected = selectedItem == index,
-                onClick = { selectedItem = index }
+                onClick = {
+                    selectedItem = index
+                    if (item == "Insights") onNavigateToInsights()
+                }
             )
         }
     }
@@ -394,6 +370,6 @@ fun SettingsNavigationBar() {
 @Composable
 fun SettingsScreenPreview() {
     com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme {
-        SettingsScreen()
+        SettingsScreen(onNavigateToInsights = {})
     }
 }

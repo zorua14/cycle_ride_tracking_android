@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "material-3-expressive": {
+      "source": "albermonte/android-skills",
+      "sourceType": "github",
+      "skillPath": "skills/material-3-expressive/SKILL.md",
+      "computedHash": "845ef00d9b328492b585a90f47552c3e01920e75c95f48d45ea04ef98cce18ac"
+    }
+  }
+}

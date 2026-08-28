@@ -13,74 +13,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onNavigateToInsights: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+fun SettingsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            SettingsSectionTitle("THEME & DISPLAY")
+            ThemeDisplayCard()
+        }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text(
-                        "Settings & Preferences",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
-                ),
-                scrollBehavior = scrollBehavior
-            )
-        },
-        bottomBar = {
-            SettingsNavigationBar(onNavigateToInsights)
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
-            }
-        },
-        contentWindowInsets = WindowInsets.systemBars
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item {
-                SettingsSectionTitle("THEME & DISPLAY")
-                ThemeDisplayCard()
-            }
+        item {
+            SettingsSectionTitle("RECORDING ENGINE")
+            RecordingEngineSection()
+        }
 
-            item {
-                SettingsSectionTitle("RECORDING ENGINE")
-                RecordingEngineSection()
-            }
-
-            item {
-                SettingsSectionTitle("RIDE GOALS")
-                GoalsSection()
-            }
+        item {
+            SettingsSectionTitle("RIDE GOALS")
+            GoalsSection()
         }
     }
 }
@@ -342,34 +300,10 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
     )
 }
 
-@Composable
-fun SettingsNavigationBar(onNavigateToInsights: () -> Unit) {
-    var selectedItem by remember { mutableIntStateOf(3) }
-    val items = listOf("Dashboard", "History", "Insights", "Settings")
-    val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Default.Tune)
-
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.background,
-        tonalElevation = 8.dp
-    ) {
-        items.forEachIndexed { index, item ->
-            NavigationBarItem(
-                icon = { Icon(icons[index], contentDescription = item) },
-                label = { Text(item) },
-                selected = selectedItem == index,
-                onClick = {
-                    selectedItem = index
-                    if (item == "Insights") onNavigateToInsights()
-                }
-            )
-        }
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 fun SettingsScreenPreview() {
     com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme {
-        SettingsScreen(onNavigateToInsights = {})
+        SettingsContent()
     }
 }

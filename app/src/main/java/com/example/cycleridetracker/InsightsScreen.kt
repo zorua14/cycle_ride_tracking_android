@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -33,82 +32,43 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(onNavigateToSettings: () -> Unit) {
+fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
     val haptic = LocalHapticFeedback.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var selectedRange by remember { mutableStateOf("Week") }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text(
-                        "Cycling Insights",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share")
-                    }
-                },
-                scrollBehavior = scrollBehavior
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            TimeRangeSelector(
+                selected = selectedRange,
+                onSelected = {
+                    selectedRange = it
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
             )
-        },
-        bottomBar = {
-            InsightsNavigationBar(onNavigateToSettings)
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
-            }
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item {
-                TimeRangeSelector(
-                    selected = selectedRange,
-                    onSelected = {
-                        selectedRange = it
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-                )
-            }
 
-            item {
-                GoalProgressCard(selectedRange)
-            }
+        item {
+            GoalProgressCard(selectedRange)
+        }
 
-            item {
-                InsightsSectionTitle("DISTANCE VISUALIZATION")
-                DistanceVisualizationCard(selectedRange)
-            }
+        item {
+            InsightsSectionTitle("DISTANCE VISUALIZATION")
+            DistanceVisualizationCard(selectedRange)
+        }
 
-            item {
-                InsightsSectionTitle("RIDE PERFORMANCE METRICS")
-                PerformanceMetricsGrid()
-            }
+        item {
+            InsightsSectionTitle("RIDE PERFORMANCE METRICS")
+            PerformanceMetricsGrid()
+        }
 
-            item {
-                InsightsSectionTitle("ENVIRONMENTAL & CO2 FOOTPRINT")
-                EnvironmentalPlaceholder()
-            }
+        item {
+            InsightsSectionTitle("ENVIRONMENTAL & CO2 FOOTPRINT")
+            EnvironmentalPlaceholder()
         }
     }
 }
@@ -491,30 +451,6 @@ fun EnvironmentalPlaceholder() {
 }
 
 @Composable
-fun InsightsNavigationBar(onNavigateToSettings: () -> Unit) {
-    var selectedItem by remember { mutableIntStateOf(2) }
-    val items = listOf("Dashboard", "History", "Insights", "Settings")
-    val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Default.Timeline, Icons.Outlined.Tune)
-
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.background,
-        tonalElevation = 8.dp
-    ) {
-        items.forEachIndexed { index, item ->
-            NavigationBarItem(
-                icon = { Icon(icons[index], contentDescription = item) },
-                label = { Text(item) },
-                selected = selectedItem == index,
-                onClick = {
-                    selectedItem = index
-                    if (item == "Settings") onNavigateToSettings()
-                }
-            )
-        }
-    }
-}
-
-@Composable
 fun InsightsSectionTitle(title: String) {
     Text(
         text = title,
@@ -531,6 +467,6 @@ fun InsightsSectionTitle(title: String) {
 @Composable
 fun InsightsScreenPreview() {
     MaterialTheme {
-        InsightsScreen(onNavigateToSettings = {})
+        InsightsContent()
     }
 }

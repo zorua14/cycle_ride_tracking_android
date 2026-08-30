@@ -23,13 +23,14 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.cycleridetracker.ui.haptics.AppHaptics
+import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import kotlin.math.roundToInt
 
 @Composable
@@ -47,7 +48,7 @@ fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
                 selected = selectedRange,
                 onSelected = {
                     selectedRange = it
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    AppHaptics.performAction(haptic)
                 }
             )
         }
@@ -87,6 +88,12 @@ fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
                 selected = selected == option,
                 onClick = { onSelected(option) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = CycleRideTrackerTheme.colors.primary,
+                    activeContentColor = CycleRideTrackerTheme.colors.background,
+                    inactiveContainerColor = CycleRideTrackerTheme.colors.cardBackground,
+                    inactiveContentColor = CycleRideTrackerTheme.colors.onSurfaceVariant
+                ),
                 icon = {
                     SegmentedButtonDefaults.Icon(active = selected == option) {
                         Icon(
@@ -124,7 +131,7 @@ fun GoalProgressCard(selectedRange: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {
         Row(
             modifier = Modifier.padding(20.dp),
@@ -134,32 +141,40 @@ fun GoalProgressCard(selectedRange: String) {
                 CircularWavyProgressIndicator(
                     progress = { animatedProgress },
                     modifier = Modifier.fillMaxSize(),
-                    trackColor = MaterialTheme.colorScheme.outlineVariant
+                    trackColor = CycleRideTrackerTheme.colors.outline,
+                    color = CycleRideTrackerTheme.colors.primary
                 )
                 Text(
                     text = "${(animatedProgress * 100).roundToInt()}%",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
                 )
             }
             Spacer(Modifier.width(20.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Icon(
+                        Icons.Default.Flag,
+                        contentDescription = null,
+                        tint = CycleRideTrackerTheme.colors.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = if (selectedRange == "Week") "WEEKLY MILEAGE GOAL" else "TARGET GOAL",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = CycleRideTrackerTheme.colors.primary)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = if (selectedRange == "Week") "39.5 / 50 km" else "39.5 / 500 km",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
                 )
                 Text(
                     text = if (selectedRange == "Week") "10.5 km remaining to target." else "460.6 km remaining to target.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = CycleRideTrackerTheme.colors.onSurfaceVariant
                 )
             }
         }
@@ -171,7 +186,7 @@ fun DistanceVisualizationCard(selectedRange: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -181,17 +196,18 @@ fun DistanceVisualizationCard(selectedRange: String) {
             ) {
                 Text(
                     "39.5 KM TOTAL",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
                 )
                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.2f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
                         "4 rides",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = CycleRideTrackerTheme.colors.primary
                     )
                 }
             }
@@ -216,6 +232,8 @@ fun BarChartMock() {
     val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     var activeIndex by remember { mutableIntStateOf(-1) }
 
+    val colors = CycleRideTrackerTheme.colors
+
     Column {
         Box(
             modifier = Modifier
@@ -227,14 +245,14 @@ fun BarChartMock() {
                             val index = (offset.x / size.width * data.size).toInt().coerceIn(0, data.size - 1)
                             if (index != activeIndex) {
                                 activeIndex = index
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                AppHaptics.performAction(haptic)
                             }
                         },
                         onDrag = { change, _ ->
                             val index = (change.position.x / size.width * data.size).toInt().coerceIn(0, data.size - 1)
                             if (index != activeIndex) {
                                 activeIndex = index
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                AppHaptics.performAction(haptic)
                             }
                         },
                         onDragEnd = { activeIndex = -1 },
@@ -242,8 +260,8 @@ fun BarChartMock() {
                     )
                 }
         ) {
-            val primaryColor = MaterialTheme.colorScheme.primary
-            val outlineVariant = MaterialTheme.colorScheme.outlineVariant
+            val primaryColor = colors.primary
+            val outlineVariant = colors.outline
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val barWidth = size.width / (data.size * 2)
@@ -276,7 +294,7 @@ fun BarChartMock() {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             labels.forEach { label ->
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
     }
@@ -289,7 +307,8 @@ fun LineChartMock() {
     val labels = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
     var activeIndex by remember { mutableIntStateOf(-1) }
 
-    val primaryColor = MaterialTheme.colorScheme.primary
+    val colors = CycleRideTrackerTheme.colors
+    val primaryColor = colors.primary
 
     Column {
         Box(
@@ -302,14 +321,14 @@ fun LineChartMock() {
                             val index = (offset.x / size.width * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
                             if (index != activeIndex) {
                                 activeIndex = index
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                AppHaptics.performAction(haptic)
                             }
                         },
                         onDrag = { change, _ ->
                             val index = (change.position.x / size.width * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
                             if (index != activeIndex) {
                                 activeIndex = index
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                AppHaptics.performAction(haptic)
                             }
                         },
                         onDragEnd = { activeIndex = -1 },
@@ -317,7 +336,7 @@ fun LineChartMock() {
                     )
                 }
         ) {
-            val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+            val onPrimaryColor = colors.background
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val spacing = size.width / (data.size - 1)
                 val path = Path()
@@ -371,7 +390,7 @@ fun LineChartMock() {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             labels.forEach { label ->
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
     }
@@ -420,20 +439,36 @@ fun MetricCard(modifier: Modifier, icon: ImageVector, label: String, value: Stri
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = CycleRideTrackerTheme.colors.primary,
+                    modifier = Modifier.size(16.dp)
+                )
                 Spacer(Modifier.width(8.dp))
-                Text(label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = CycleRideTrackerTheme.colors.onSurfaceVariant)
+                )
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
                 if (unit.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
-                    Text(unit, style = MaterialTheme.typography.titleSmall.copy(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold), modifier = Modifier.padding(bottom = 4.dp))
+                    Text(
+                        unit,
+                        style = MaterialTheme.typography.titleSmall.copy(color = CycleRideTrackerTheme.colors.primary, fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
                 }
             }
         }
@@ -445,7 +480,7 @@ fun EnvironmentalPlaceholder() {
     Text(
         "CO2 savings and environmental impact data will appear here as you track more rides.",
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = CycleRideTrackerTheme.colors.onSurfaceVariant,
         modifier = Modifier.padding(vertical = 8.dp)
     )
 }
@@ -455,7 +490,7 @@ fun InsightsSectionTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge.copy(
-            color = MaterialTheme.colorScheme.primary,
+            color = CycleRideTrackerTheme.colors.primary,
             letterSpacing = 1.sp,
             fontWeight = FontWeight.Bold
         ),
@@ -466,7 +501,7 @@ fun InsightsSectionTitle(title: String) {
 @Preview(showBackground = true)
 @Composable
 fun InsightsScreenPreview() {
-    MaterialTheme {
+    CycleRideTrackerTheme {
         InsightsContent()
     }
 }

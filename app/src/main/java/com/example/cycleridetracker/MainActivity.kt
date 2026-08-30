@@ -23,22 +23,39 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.cycleridetracker.data.ThemePrefs
+import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            CycleRideTrackerTheme {
-                MainApp()
+            val context = LocalContext.current
+            val themeMode = remember { mutableStateOf(ThemePrefs.getTheme(context)) }
+            
+            val isDarkTheme = when (themeMode.value) {
+                "Light" -> false
+                "Dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            
+            val useDynamicColor = themeMode.value == "System"
+
+            CycleRideTrackerTheme(
+                darkTheme = isDarkTheme,
+                dynamicColor = useDynamicColor
+            ) {
+                MainApp(onThemeChanged = { themeMode.value = it })
             }
         }
     }
@@ -46,7 +63,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MainApp() {
+fun MainApp(onThemeChanged: (String) -> Unit) {
     val haptic = LocalHapticFeedback.current
     var currentScreen by remember { mutableStateOf("Insights") }
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -71,38 +88,48 @@ fun MainApp() {
                     Text(
                         if (currentScreen == "Insights") "Cycling Insights" else "Settings & Preferences",
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = CycleRideTrackerTheme.colors.largeTitle
                         )
                     )
                 },
                 actions = {
                     if (currentScreen == "Insights") {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
+                        IconButton(onClick = { AppHaptics.performAction(haptic) }) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = CycleRideTrackerTheme.colors.onSurface
+                            )
                         }
                     }
                 },
-                scrollBehavior = topAppBarScrollBehavior
+                scrollBehavior = topAppBarScrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = CycleRideTrackerTheme.colors.background,
+                    scrolledContainerColor = CycleRideTrackerTheme.colors.background,
+                    titleContentColor = CycleRideTrackerTheme.colors.largeTitle
+                )
             )
         },
         floatingActionButton = {
             HorizontalFloatingToolbar(
-                modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        toolbarHeightPx = coordinates.size.height
-                    }
-                    .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
                 expanded = true,
                 floatingActionButton = {
                     FloatingToolbarDefaults.VibrantFloatingActionButton(
                         onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            AppHaptics.performAction(haptic)
                         },
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
                     }
                 },
+                modifier = Modifier
+                    .onGloballyPositioned { coordinates ->
+                        toolbarHeightPx = coordinates.size.height
+                    }
+                    .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
                 scrollBehavior = floatingToolbarScrollBehavior
             ) {
                 val items = listOf("Dashboard", "History", "Insights", "Settings")
@@ -121,9 +148,9 @@ fun MainApp() {
                         onClick = {
                             if (currentScreen != item && (item == "Insights" || item == "Settings")) {
                                 currentScreen = item
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                AppHaptics.performSelection(haptic)
                             } else {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                AppHaptics.performAction(haptic)
                             }
                         },
                         modifier = Modifier.scale(scale)
@@ -131,13 +158,14 @@ fun MainApp() {
                         Icon(
                             if (isSelected) selectedIcons[index] else icons[index],
                             contentDescription = item,
-                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (isSelected) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
                         )
                     }
                 }
             }
         },
-        floatingActionButtonPosition = FabPosition.Center
+        floatingActionButtonPosition = FabPosition.Center,
+        containerColor = CycleRideTrackerTheme.colors.background
     ) { innerPadding ->
         val measuredBottomPadding = with(density) { toolbarHeightPx.toDp() }
 
@@ -151,7 +179,7 @@ fun MainApp() {
                 )
                 when (screen) {
                     "Insights" -> InsightsContent(contentPadding)
-                    "Settings" -> SettingsContent(contentPadding)
+                    "Settings" -> SettingsContent(onThemeChanged, contentPadding)
                     else -> Box(
                         Modifier
                             .fillMaxSize()

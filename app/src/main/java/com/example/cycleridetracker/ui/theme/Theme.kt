@@ -38,36 +38,39 @@ object CycleRideTrackerTheme {
 }
 
 private val DarkColorScheme = darkColorScheme(
-    primary = White,
-    onPrimary = Black,
-    secondary = White,
-    onSecondary = Black,
-    tertiary = White,
-    onTertiary = Black,
-    background = Black,
-    surface = Black,
+    primary = Cyan400,
+    onPrimary = Navy900,
+    secondary = Cyan200,
+    onSecondary = Navy900,
+    tertiary = Gray400,
+    onTertiary = White,
+    background = Navy900,
+    surface = Navy900,
     onBackground = White,
-    onSurface = White
+    onSurface = White,
+    surfaceVariant = Navy800,
+    onSurfaceVariant = Gray400,
+    outline = Navy700
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Black,
+    primary = Navy900,
     onPrimary = White,
-    secondary = Black,
+    secondary = Navy700,
     onSecondary = White,
-    tertiary = Black,
-    onTertiary = White,
+    tertiary = Gray400,
+    onTertiary = Navy900,
     background = White,
     surface = White,
-    onBackground = Black,
-    onSurface = Black
+    onBackground = Navy900,
+    onSurface = Navy900
 )
 
 @Composable
 fun CycleRideTrackerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val baseColorScheme = when {
@@ -79,16 +82,7 @@ fun CycleRideTrackerTheme(
         else -> LightColorScheme
     }
 
-    // Force Black and White backgrounds/surfaces as per requirements
-    val colorScheme = baseColorScheme.copy(
-        background = if (darkTheme) Black else White,
-        surface = if (darkTheme) Black else White,
-        onBackground = if (darkTheme) White else Black,
-        onSurface = if (darkTheme) White else Black,
-        surfaceVariant = if (darkTheme) Black else White,
-        onSurfaceVariant = if (darkTheme) White.copy(alpha = 0.7f) else Black.copy(alpha = 0.7f),
-        outlineVariant = if (darkTheme) White.copy(alpha = 0.1f) else Black.copy(alpha = 0.1f)
-    )
+    val colorScheme = baseColorScheme
 
     val appColors = AppColors(
         primary = colorScheme.primary,
@@ -96,9 +90,9 @@ fun CycleRideTrackerTheme(
         surface = colorScheme.surface,
         onSurface = colorScheme.onSurface,
         onSurfaceVariant = colorScheme.onSurfaceVariant,
-        largeTitle = if (dynamicColor) colorScheme.onSurface else if (darkTheme) LargeTitleDark else LargeTitleLight,
-        outline = colorScheme.outlineVariant,
-        cardBackground = if (darkTheme) White.copy(alpha = 0.1f) else Black.copy(alpha = 0.05f)
+        largeTitle = if (darkTheme) Cyan400 else Navy900,
+        outline = colorScheme.outline,
+        cardBackground = if (darkTheme) Navy800 else Color.LightGray.copy(alpha = 0.1f)
     )
 
     CompositionLocalProvider(LocalAppColors provides appColors) {

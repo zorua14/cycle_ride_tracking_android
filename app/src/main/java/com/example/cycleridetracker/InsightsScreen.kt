@@ -48,7 +48,7 @@ fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
                 selected = selectedRange,
                 onSelected = {
                     selectedRange = it
-                    AppHaptics.performAction(haptic)
+                    AppHaptics.performSelection(haptic)
                 }
             )
         }

@@ -15,3 +15,12 @@ val LargeTitleDark = Color(0xFFA3CBEC)
 
 val White = Color(0xFFFFFFFF)
 val Black = Color(0xFF000000)
+
+// Navy / Cyan Palette for Dashboard
+val Navy900 = Color(0xFF0A111F)
+val Navy800 = Color(0xFF151E2B)
+val Navy700 = Color(0xFF1E293B)
+val Cyan400 = Color(0xFF81D4FA)
+val Cyan200 = Color(0xFFB3E5FC)
+val Gray400 = Color(0xFF94A3B8)
+val StreakPurple = Color(0xFF4A4458)

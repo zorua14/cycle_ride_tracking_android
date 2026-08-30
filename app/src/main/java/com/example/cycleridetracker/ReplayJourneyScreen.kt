@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,10 +53,10 @@ fun ReplayJourneyScreen(
     onBack: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    var isPlaying by remember { mutableStateOf(value = false) }
-    var currentFrame by remember { mutableIntStateOf(13) }
+    var isPlaying by rememberSaveable { mutableStateOf(value = false) }
+    var currentFrame by rememberSaveable { mutableIntStateOf(13) }
     val totalFrames = 45
-    var playbackSpeed by remember { mutableIntStateOf(2) }
+    var playbackSpeed by rememberSaveable { mutableIntStateOf(2) }
     val scrollState = rememberScrollState()
 
     val waypoints = listOf(

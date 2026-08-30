@@ -39,7 +39,26 @@ import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.example.cycleridetracker.ui.components.RideData
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+
+val RideDataSaver = listSaver<RideData?, Any>(
+    save = { 
+        if (it == null) emptyList() 
+        else listOf(it.title, it.time, it.distance, it.duration, it.avgSpeed, it.isFavorite) 
+    },
+    restore = { 
+        if (it.isEmpty()) null 
+        else RideData(
+            title = it[0] as String,
+            time = it[1] as String,
+            distance = it[2] as String,
+            duration = it[3] as String,
+            avgSpeed = it[4] as String,
+            isFavorite = it[5] as Boolean
+        ) 
+    }
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,7 +92,7 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
     val haptic = LocalHapticFeedback.current
     var currentScreen by rememberSaveable { mutableStateOf("Dashboard") }
     var previousScreen by rememberSaveable { mutableStateOf("Dashboard") }
-    var selectedRide by remember { mutableStateOf<RideData?>(null) }
+    var selectedRide by rememberSaveable(stateSaver = RideDataSaver) { mutableStateOf<RideData?>(null) }
 
     val floatingToolbarState = rememberFloatingToolbarState()
     val floatingToolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(

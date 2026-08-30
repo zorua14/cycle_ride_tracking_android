@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,7 +23,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,21 +35,24 @@ import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.example.cycleridetracker.ui.theme.Navy700
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import kotlin.time.Duration.Companion.milliseconds
+import java.util.Locale
 
 data class Waypoint(
     val frame: Int,
     val title: String,
-    val position: Offset
+    val position: Offset,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ReplayJourneyScreen(
     ride: RideData,
     onBack: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    var isPlaying by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(value = false) }
     var currentFrame by remember { mutableIntStateOf(13) }
     val totalFrames = 45
     var playbackSpeed by remember { mutableIntStateOf(2) }
@@ -63,7 +69,7 @@ fun ReplayJourneyScreen(
     LaunchedEffect(isPlaying, playbackSpeed) {
         if (isPlaying) {
             while (currentFrame < totalFrames) {
-                delay(1000L / playbackSpeed)
+                delay((1000L / playbackSpeed).milliseconds)
                 currentFrame++
             }
             isPlaying = false
@@ -259,7 +265,7 @@ fun ReplayJourneyScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                ReplayTelemetryCard(Modifier.widthIn(min = 100.dp), Icons.Default.Straighten, "DISTANCE", String.format("%.2f", currentDist), "km")
+                ReplayTelemetryCard(Modifier.widthIn(min = 100.dp), Icons.Default.Straighten, "DISTANCE", String.format(Locale.US, "%.2f", currentDist), "km")
                 ReplayTelemetryCard(Modifier.widthIn(min = 100.dp), Icons.Default.Landscape, "ALTITUDE", "50", "m")
                 ReplayTelemetryCard(Modifier.widthIn(min = 100.dp), Icons.Default.Timelapse, "PROGRESS", progressPercent.toString(), "%")
             }
@@ -334,33 +340,80 @@ fun ReplayJourneyScreen(
                     Spacer(Modifier.height(16.dp))
 
                     // Speed Selector
-                    FlowRow(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Navy700)
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        listOf(1, 2, 5, 10).forEach { speed ->
-                            val isSelected = playbackSpeed == speed
-                            Surface(
-                                onClick = { playbackSpeed = speed },
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) CycleRideTrackerTheme.colors.primary else Color.Transparent,
-                                contentColor = if (isSelected) Navy700 else Color.White
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (isSelected) {
-                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        Spacer(Modifier.width(4.dp))
-                                    }
-                                    Text("${speed}x", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                                }
+                    val speeds = listOf(1, 2, 5, 10)
+
+                    ButtonGroup(
+                        overflowIndicator = { menuState ->
+                            IconButton(onClick = { menuState.show() }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More speeds")
                             }
+                        },
+                        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        speeds.forEachIndexed { index, speed ->
+                            customItem(
+                                buttonGroupContent = {
+                                    val isSelected = playbackSpeed == speed
+                                    val interactionSource = remember { MutableInteractionSource() }
+                                    val layoutDirection = LocalLayoutDirection.current
+                                    val contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                    val compressionLimit = contentPadding.calculateEndPadding(layoutDirection)
+                                    
+                                    val shapes = when (index) {
+                                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                                        speeds.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                                    }
+
+                                    ToggleButton(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            if (checked) {
+                                                playbackSpeed = speed
+                                                AppHaptics.performAction(haptic)
+                                            }
+                                        },
+                                        shapes = shapes,
+                                        contentPadding = contentPadding,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .animateWidth(interactionSource, compressionLimit = compressionLimit),
+                                        interactionSource = interactionSource,
+                                        content = {
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                                                )
+                                                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                                            }
+                                            Text(
+                                                text = "${speed}x",
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Visible
+                                            )
+                                        }
+                                    )
+                                },
+                                menuContent = { menuState ->
+                                    val isSelected = playbackSpeed == speed
+                                    DropdownMenuItem(
+                                        text = { Text("${speed}x") },
+                                        leadingIcon = if (isSelected) {
+                                            { Icon(Icons.Default.Check, contentDescription = null) }
+                                        } else null,
+                                        onClick = {
+                                            playbackSpeed = speed
+                                            menuState.dismiss()
+                                        }
+                                    )
+                                }
+                            )
                         }
                     }
                 }
@@ -414,26 +467,10 @@ fun ReplayJourneyPreview() {
         false
     )
     CycleRideTrackerTheme(darkTheme = true) {
-        ReplayJourneyScreen(ride = mockRide, onBack = {})
+        ReplayJourneyScreen(
+            ride = mockRide,
+            onBack = {}
+        )
     }
 }
 
-@Preview(
-    showBackground = true,
-    name = "Small Device Width",
-    device = "spec:width=320dp,height=640dp,dpi=480"
-)
-@Composable
-fun ReplayJourneySmallPreview() {
-    val mockRide = RideData(
-        "Morning Downtown Ride Return",
-        "Wed, Aug 26 • 5:45 PM",
-        "9.2 km",
-        "30:20",
-        "20.4 km/h",
-        false
-    )
-    CycleRideTrackerTheme(darkTheme = true) {
-        ReplayJourneyScreen(ride = mockRide, onBack = {})
-    }
-}

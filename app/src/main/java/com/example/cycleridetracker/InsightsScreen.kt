@@ -116,7 +116,7 @@ fun GoalProgressCard(selectedRange: String) {
     val targetProgress = when (selectedRange) {
         "Week" -> 0.78f
         "Month" -> 0.45f
-        else -> 0.07f
+        else -> 0.5f
     }
 
     val animatedProgress by animateFloatAsState(

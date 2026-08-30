@@ -1,3 +1,4 @@
+
 package com.example.cycleridetracker
 
 import android.os.Bundle
@@ -6,10 +7,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
@@ -26,7 +27,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -48,20 +48,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val themeMode = remember { mutableStateOf(ThemePrefs.getTheme(context)) }
-            
+
             val isDarkTheme = when (themeMode.value) {
                 "Light" -> false
                 "Dark" -> true
                 else -> isSystemInDarkTheme()
             }
-            
+
             val useDynamicColor = themeMode.value == "System"
 
             CycleRideTrackerTheme(
                 darkTheme = isDarkTheme,
-                dynamicColor = useDynamicColor
+                dynamicColor = useDynamicColor,
             ) {
-                MainApp(onThemeChanged = { themeMode.value = it })
+                MainApp { themeMode.value = it }
             }
         }
     }
@@ -74,21 +74,32 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
     var currentScreen by rememberSaveable { mutableStateOf("Dashboard") }
     var previousScreen by rememberSaveable { mutableStateOf("Dashboard") }
     var selectedRide by remember { mutableStateOf<RideData?>(null) }
-    
-    BackHandler(enabled = currentScreen != "Dashboard") {
-        currentScreen = when (currentScreen) {
-            "RideDetail" -> previousScreen
-            "ReplayJourney" -> "RideDetail"
-            else -> "Dashboard"
-        }
-    }
-    val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val floatingToolbarState = rememberFloatingToolbarState()
     val floatingToolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
         exitDirection = FloatingToolbarExitDirection.Bottom,
-        state = floatingToolbarState
+        state = floatingToolbarState,
     )
+
+    val toolbarScreens = listOf("Dashboard", "History", "Insights", "Settings")
+
+    BackHandler(enabled = currentScreen != "Dashboard") {
+        val nextScreen = when (currentScreen) {
+            "RideDetail" -> previousScreen
+            "ReplayJourney" -> "RideDetail"
+            else -> "Dashboard"
+        }
+
+        // Immediate toolbar state adjustment for flicker-free transitions
+        if (nextScreen !in toolbarScreens) {
+            floatingToolbarState.offset = -2000f // Force hide
+        } else {
+            floatingToolbarState.offset = 0f
+        }
+
+        currentScreen = nextScreen
+    }
+    val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var toolbarHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -102,53 +113,64 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
             // Header is handled per-screen for seamless transitions
         },
         floatingActionButton = {
-            HorizontalFloatingToolbar(
-                expanded = true,
-                floatingActionButton = {
-                    FloatingToolbarDefaults.VibrantFloatingActionButton(
-                        onClick = {
-                            AppHaptics.performAction(haptic)
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
-                    }
-                },
-                modifier = Modifier
-                    .onGloballyPositioned { coordinates ->
-                        toolbarHeightPx = coordinates.size.height
-                    }
-                    .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
-                scrollBehavior = floatingToolbarScrollBehavior
-            ) {
-                val items = listOf("Dashboard", "History", "Insights", "Settings")
-                val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Outlined.Tune)
-                val selectedIcons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Default.Timeline, Icons.Default.Tune)
-
-                items.forEachIndexed { index, item ->
-                    val isSelected = currentScreen == item
-                    val scale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.2f else 1f,
-                        animationSpec = spring(dampingRatio = 0.7f, stiffness = 300f),
-                        label = "IconScale"
-                    )
-
-                    IconButton(
-                        onClick = {
-                            if (currentScreen != item) {
-                                currentScreen = item
-                                AppHaptics.performSelection(haptic)
-                            } else {
+            if (currentScreen in toolbarScreens) {
+                HorizontalFloatingToolbar(
+                    expanded = true,
+                    floatingActionButton = {
+                        FloatingToolbarDefaults.VibrantFloatingActionButton(
+                            onClick = {
                                 AppHaptics.performAction(haptic)
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
+                        }
+                    },
+                    modifier = Modifier
+                        .onGloballyPositioned { coordinates ->
+                            toolbarHeightPx = coordinates.size.height
+                        }
+                        .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
+                    scrollBehavior = floatingToolbarScrollBehavior,
+                ) {
+                    val items = listOf("Dashboard", "History", "Insights", "Settings")
+                    val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Outlined.Tune)
+                    val selectedIcons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Default.Timeline, Icons.Default.Tune)
+
+                    items.forEachIndexed { index, item ->
+                        val isSelected = currentScreen == item
+
+                        IconButton(
+                            onClick = {
+                                if (currentScreen != item) {
+                                    currentScreen = item
+                                    AppHaptics.performSelection(haptic)
+                                    // Reset the toolbar scroll state when switching main tabs.
+                                    floatingToolbarState.offset = 0f
+                                    floatingToolbarState.contentOffset = 0f
+                                } else {
+                                    AppHaptics.performAction(haptic)
+                                }
                             }
-                        },
-                        modifier = Modifier.scale(scale)
-                    ) {
-                        Icon(
-                            if (isSelected) selectedIcons[index] else icons[index],
-                            contentDescription = item,
-                            tint = if (isSelected) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
-                        )
+                        ) {
+                            Box(
+                                modifier = if (isSelected) {
+                                    Modifier
+                                        .size(50.dp)
+                                        .background(
+                                            color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.12f),
+                                            shape = CircleShape
+                                        )
+                                } else Modifier,
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    if (isSelected) selectedIcons[index] else icons[index],
+                                    contentDescription = item,
+                                    tint = if (isSelected) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -163,14 +185,15 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
             SharedTransitionLayout {
                 val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney")
                 AnimatedContent(
-                    targetState = when {
-                        currentScreen == "RideDetail" -> "RideDetail"
-                        currentScreen == "ReplayJourney" -> "ReplayJourney"
+                    targetState = when (currentScreen) {
+                        "RideDetail" -> "RideDetail"
+                        "ReplayJourney" -> "ReplayJourney"
                         else -> currentScreen
                     },
                     label = "ScreenTransition",
                     transitionSpec = {
-                        if (listOf(initialState, targetState).any { it in listOf("RideDetail", "ReplayJourney") }) {
+                        if ((initialState in listOf("RideDetail", "ReplayJourney")) ||
+                            (targetState in listOf("RideDetail", "ReplayJourney"))) {
                             fadeIn(tween(600)) togetherWith fadeOut(tween(600))
                         } else {
                             val initialIndex = items.indexOf(initialState)
@@ -181,14 +204,14 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                                 AnimatedContentTransitionScope.SlideDirection.Right
                             }
 
-                            slideIntoContainer(
+                            (slideIntoContainer(
                                 towards = direction,
                                 animationSpec = tween(400)
-                            ) + fadeIn(animationSpec = tween(400)) togetherWith
-                            slideOutOfContainer(
-                                towards = direction,
-                                animationSpec = tween(400)
-                            ) + fadeOut(animationSpec = tween(400))
+                            ) + fadeIn(animationSpec = tween(400))) togetherWith
+                                    (slideOutOfContainer(
+                                        towards = direction,
+                                        animationSpec = tween(400)
+                                    ) + fadeOut(animationSpec = tween(400)))
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -241,7 +264,11 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
 
                         val contentPadding = PaddingValues(
                             top = 0.dp,
-                            bottom = measuredBottomPadding + 48.dp,
+                            bottom = if (screen in toolbarScreens) {
+                                measuredBottomPadding + 48.dp
+                            } else {
+                                16.dp
+                            },
                             start = 16.dp,
                             end = 16.dp
                         )
@@ -256,7 +283,14 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                                 },
                                 onReplayLatest = {
                                     // Mock selecting the first ride for replay
-                                    selectedRide = RideData("Morning Downtown Ride", "Thu, Aug 27 • 4:45 PM", "8.4 km", "28:00", "19.8 km/h", true)
+                                    selectedRide = RideData(
+                                        title = "Morning Downtown Ride",
+                                        time = "Thu, Aug 27 • 4:45 PM",
+                                        distance = "8.4 km",
+                                        duration = "28:00",
+                                        avgSpeed = "19.8 km/h",
+                                        isFavorite = true
+                                    )
                                     currentScreen = "ReplayJourney"
                                 },
                                 sharedTransitionScope = this@SharedTransitionLayout,
@@ -265,8 +299,13 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                             "RideDetail" -> selectedRide?.let { ride ->
                                 RideDetailScreen(
                                     ride = ride,
-                                    onBack = { currentScreen = previousScreen },
-                                    onReplayClick = { currentScreen = "ReplayJourney" },
+                                    onBack = {
+                                        val prev = previousScreen
+                                        currentScreen = prev
+                                    },
+                                    onReplayClick = {
+                                        currentScreen = "ReplayJourney"
+                                    },
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this@AnimatedContent,
                                     keyPrefix = previousScreen.lowercase()
@@ -275,7 +314,9 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                             "ReplayJourney" -> selectedRide?.let { ride ->
                                 ReplayJourneyScreen(
                                     ride = ride,
-                                    onBack = { currentScreen = "RideDetail" }
+                                    onBack = {
+                                        currentScreen = "RideDetail"
+                                    }
                                 )
                             }
                             "History" -> HistoryContent(
@@ -300,3 +341,4 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
         }
     }
 }
+

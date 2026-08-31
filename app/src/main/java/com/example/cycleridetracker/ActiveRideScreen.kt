@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
+import androidx.compose.ui.text.PlatformTextStyle
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -243,13 +244,6 @@ fun ActiveRideScreen(
                         value = "24.5",
                         unit = "km/h"
                     )
-                    ActiveTelemetryCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.CameraAlt,
-                        label = "PHOTOS",
-                        value = "0",
-                        unit = "pins"
-                    )
                 }
             }
 
@@ -345,44 +339,73 @@ fun ActiveTelemetryCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
+        colors = CardDefaults.cardColors(
+            containerColor = CycleRideTrackerTheme.colors.cardBackground
+        )
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
-                    icon,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = Cyan400,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(Modifier.width(6.dp))
+
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     color = CycleRideTrackerTheme.colors.onSurfaceVariant,
                     maxLines = 1
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row {
                 Text(
-                    value,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    text = value,
+                    modifier = Modifier.alignByBaseline(),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(
+                            includeFontPadding = false
+                        )
+                    ),
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    unit,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = CycleRideTrackerTheme.colors.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                )
+
+                if (unit.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Text(
+                        text = unit,
+                        modifier = Modifier.alignByBaseline(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(
+                                includeFontPadding = false
+                            )
+                        ),
+                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
+                    )
+                }
             }
         }
     }
+
+
 }
+
 
 @Preview(showBackground = true)
 @Composable

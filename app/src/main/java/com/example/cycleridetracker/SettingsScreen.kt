@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -13,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -197,7 +195,6 @@ fun ConnectedThemeSelector(selected: String, onSelected: (String) -> Unit) {
 @Composable
 fun RecordingEngineSection() {
     val haptic = LocalHapticFeedback.current
-    var autoPause by remember { mutableStateOf(true) }
     var hapticFeedback by remember { mutableStateOf(true) }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -209,13 +206,6 @@ fun RecordingEngineSection() {
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
         ) {
             ListItem(
-                headlineContent = {
-                    Text(
-                        "GPS Sampling Rate",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CycleRideTrackerTheme.colors.onSurface
-                    )
-                },
                 supportingContent = {
                     Text(
                         "High Accuracy (1s)",
@@ -231,46 +221,13 @@ fun RecordingEngineSection() {
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = CycleRideTrackerTheme.colors.cardBackground
-            ),
-            shape = RoundedCornerShape(4.dp)
-        ) {
-            ListItem(
-                headlineContent = {
-                    Text(
-                        "Auto-Pause when Stopped",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CycleRideTrackerTheme.colors.onSurface
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        "Automatically pauses recording below 2 km/h",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
-                    )
-                },
-                trailingContent = {
-                    Switch(
-                        checked = autoPause,
-                        onCheckedChange = {
-                            autoPause = it
-                            AppHaptics.performAction(haptic)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = CycleRideTrackerTheme.colors.primary,
-                            checkedTrackColor = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.5f)
-                        )
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
+            ) {
+                Text(
+                    "GPS Sampling Rate",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
+            }
         }
 
         Card(
@@ -281,13 +238,6 @@ fun RecordingEngineSection() {
             shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
         ) {
             ListItem(
-                headlineContent = {
-                    Text(
-                        "Tactile Haptic Feedback",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = CycleRideTrackerTheme.colors.onSurface
-                    )
-                },
                 supportingContent = {
                     Text(
                         "Vibrations for buttons, hold-to-confirm, and key actions.",
@@ -309,7 +259,13 @@ fun RecordingEngineSection() {
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            )
+            ) {
+                Text(
+                    "Tactile Haptic Feedback",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
+            }
         }
     }
 }
@@ -351,13 +307,6 @@ fun GoalsSection() {
 fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
     val haptic = LocalHapticFeedback.current
     ListItem(
-        headlineContent = {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                color = CycleRideTrackerTheme.colors.onSurface
-            )
-        },
         supportingContent = {
             Text(
                 subtitle,
@@ -392,13 +341,19 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
             }
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = CycleRideTrackerTheme.colors.onSurface
+        )
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun SettingsScreenPreview() {
-    com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme {
+    CycleRideTrackerTheme {
         SettingsContent()
     }
 }

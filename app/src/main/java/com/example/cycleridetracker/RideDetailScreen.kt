@@ -11,13 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +23,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -427,46 +423,74 @@ fun TelemetryCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
+        colors = CardDefaults.cardColors(
+            containerColor = CycleRideTrackerTheme.colors.cardBackground
+        )
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Icon(
-                    icon,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = Cyan400,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(Modifier.width(6.dp))
+
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Text(
-                    label,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     color = CycleRideTrackerTheme.colors.onSurfaceVariant,
                     maxLines = 1
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    value,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    text = value,
+                    modifier = Modifier.alignByBaseline(),
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        platformStyle = PlatformTextStyle(
+                            includeFontPadding = false
+                        )
+                    ),
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
+
                 if (unit.isNotEmpty()) {
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     Text(
-                        unit,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = CycleRideTrackerTheme.colors.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        text = unit,
+                        modifier = Modifier.alignByBaseline(),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(
+                                includeFontPadding = false
+                            )
+                        ),
+                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
                     )
                 }
             }
         }
     }
+
 }
 
 @Composable
@@ -546,7 +570,7 @@ fun PhotoCard(title: String, icon: ImageVector) {
 @Composable
 fun AddPhotoPlaceholder() {
     Surface(
-        modifier = Modifier.size(120.dp),
+        modifier = Modifier.size(140.dp),
         shape = RoundedCornerShape(20.dp),
         color = Color.Transparent,
         border = androidx.compose.foundation.BorderStroke(1.dp, Navy700)
@@ -568,7 +592,7 @@ fun AddPhotoPlaceholder() {
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
-@Preview(showBackground = true)
+@Preview(showBackground = true, heightDp = 2000)
 @Composable
 fun RideDetailPreview() {
     val mockRide = RideData(

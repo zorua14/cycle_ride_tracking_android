@@ -3,6 +3,7 @@ package com.example.cycleridetracker
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -32,13 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.components.RideData
 import com.example.cycleridetracker.ui.haptics.AppHaptics
-import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
-import com.example.cycleridetracker.ui.theme.Navy700
 import kotlinx.coroutines.delay
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import kotlin.time.Duration.Companion.milliseconds
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 data class Waypoint(
     val frame: Int,
@@ -76,6 +73,11 @@ fun ReplayJourneyScreen(
             isPlaying = false
         }
     }
+
+    val primaryColor = CycleRideTrackerTheme.colors.primary
+    val gridColor = CycleRideTrackerTheme.colors.onSurface.copy(alpha = 0.08f)
+    val finishColor = MaterialTheme.colorScheme.error
+    val inactiveWaypointColor = CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.5f)
 
     Scaffold(
         topBar = {
@@ -122,14 +124,14 @@ fun ReplayJourneyScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .background(CycleRideTrackerTheme.colors.cardBackground)
             ) {
-                // Background Grid (Simplified)
+                // Background Grid
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val step = 40.dp.toPx()
                     for (i in 0..(size.width / step).toInt()) {
-                        drawLine(Color.White.copy(alpha = 0.05f), Offset(i * step, 0f), Offset(i * step, size.height))
+                        drawLine(gridColor, Offset(i * step, 0f), Offset(i * step, size.height))
                     }
                     for (i in 0..(size.height / step).toInt()) {
-                        drawLine(Color.White.copy(alpha = 0.05f), Offset(0f, i * step), Offset(size.width, i * step))
+                        drawLine(gridColor, Offset(0f, i * step), Offset(size.width, i * step))
                     }
                 }
 
@@ -149,20 +151,19 @@ fun ReplayJourneyScreen(
                     }
                     drawPath(
                         path = path,
-                        color = Cyan400,
+                        color = primaryColor,
                         style = Stroke(width = 8.dp.toPx())
                     )
 
                     // Current Position Marker
                     val progress = currentFrame.toFloat() / totalFrames
-                    // Simplified: just placing it along the diagonal for visual representation
                     drawCircle(
-                        color = Color.White,
+                        color = primaryColor,
                         radius = 8.dp.toPx(),
                         center = Offset(size.width * progress, size.height * (0.7f - 0.5f * progress))
                     )
                     drawCircle(
-                        color = Color(0xFFFF8A80),
+                        color = finishColor,
                         radius = 4.dp.toPx(),
                         center = Offset(size.width * progress, size.height * (0.7f - 0.5f * progress))
                     )
@@ -171,7 +172,7 @@ fun ReplayJourneyScreen(
                     waypoints.forEach { waypoint ->
                         val isReached = currentFrame >= waypoint.frame
                         drawCircle(
-                            color = if (isReached) Cyan400 else Color.White.copy(alpha = 0.5f),
+                            color = if (isReached) primaryColor else inactiveWaypointColor,
                             radius = 6.dp.toPx(),
                             center = Offset(size.width * waypoint.position.x, size.height * waypoint.position.y)
                         )
@@ -183,15 +184,24 @@ fun ReplayJourneyScreen(
                     modifier = Modifier.padding(16.dp).align(Alignment.TopStart),
                     shape = RoundedCornerShape(12.dp),
                     color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.8f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Navy700)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.outline)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Speed, contentDescription = null, tint = Cyan400, modifier = Modifier.size(16.dp))
+                        Icon(
+                            Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = CycleRideTrackerTheme.colors.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
-                        Text("22.0 KM/H", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                        Text(
+                            "22.0 KM/H",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = CycleRideTrackerTheme.colors.onSurface
+                        )
                     }
                 }
 
@@ -199,12 +209,13 @@ fun ReplayJourneyScreen(
                     modifier = Modifier.padding(16.dp).align(Alignment.TopEnd),
                     shape = RoundedCornerShape(12.dp),
                     color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.8f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Navy700)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.outline)
                 ) {
                     Text(
                         "1:30:26 PM",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = CycleRideTrackerTheme.colors.onSurface
                     )
                 }
 
@@ -222,7 +233,7 @@ fun ReplayJourneyScreen(
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.9f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Cyan400.copy(alpha = 0.5f))
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.primary.copy(alpha = 0.5f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
@@ -230,11 +241,15 @@ fun ReplayJourneyScreen(
                             ) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = Cyan400.copy(alpha = 0.1f),
+                                    color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.1f),
                                     modifier = Modifier.size(40.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Cyan400)
+                                        Icon(
+                                            Icons.Default.CameraAlt,
+                                            contentDescription = null,
+                                            tint = CycleRideTrackerTheme.colors.primary
+                                        )
                                     }
                                 }
                                 Spacer(Modifier.width(16.dp))
@@ -246,10 +261,15 @@ fun ReplayJourneyScreen(
                                     )
                                     Text(
                                         waypoint.title,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = CycleRideTrackerTheme.colors.onSurface
                                     )
                                 }
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CycleRideTrackerTheme.colors.onSurfaceVariant)
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = CycleRideTrackerTheme.colors.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -277,18 +297,30 @@ fun ReplayJourneyScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("START", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = Cyan400)
-                    Text("FRAME $currentFrame OF $totalFrames", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                    Text("FINISH", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = Color(0xFFFF8A80))
+                    Text(
+                        "START",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CycleRideTrackerTheme.colors.primary
+                    )
+                    Text(
+                        "FRAME $currentFrame OF $totalFrames",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CycleRideTrackerTheme.colors.onSurface
+                    )
+                    Text(
+                        "FINISH",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
                 Slider(
                     value = currentFrame.toFloat(),
                     onValueChange = { currentFrame = it.toInt() },
                     valueRange = 0f..totalFrames.toFloat(),
                     colors = SliderDefaults.colors(
-                        thumbColor = Cyan400,
-                        activeTrackColor = Cyan400,
-                        inactiveTrackColor = Navy700
+                        thumbColor = CycleRideTrackerTheme.colors.primary,
+                        activeTrackColor = CycleRideTrackerTheme.colors.primary,
+                        inactiveTrackColor = CycleRideTrackerTheme.colors.cardBackground
                     )
                 )
             }
@@ -306,15 +338,15 @@ fun ReplayJourneyScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         IconButton(onClick = { currentFrame = 0 }) {
-                            Icon(Icons.Default.Replay, contentDescription = "Reset", tint = Cyan400)
+                            Icon(Icons.Default.Replay, contentDescription = "Reset", tint = CycleRideTrackerTheme.colors.onSurface)
                         }
                         IconButton(onClick = { currentFrame = (currentFrame - 5).coerceAtLeast(0) }) {
                             Icon(Icons.Default.FastRewind, contentDescription = "Back", tint = CycleRideTrackerTheme.colors.onSurface)
                         }
                         FloatingActionButton(
                             onClick = { isPlaying = !isPlaying },
-                            containerColor = Cyan400,
-                            contentColor = Navy700,
+                            containerColor = CycleRideTrackerTheme.colors.primary,
+                            contentColor = CycleRideTrackerTheme.colors.background,
                             shape = CircleShape,
                             modifier = Modifier.size(64.dp)
                         ) {
@@ -329,11 +361,15 @@ fun ReplayJourneyScreen(
                         }
                         Surface(
                             shape = CircleShape,
-                            color = Navy700,
+                            color = CycleRideTrackerTheme.colors.outline,
                             modifier = Modifier.size(40.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("${playbackSpeed}x", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                                Text(
+                                    "${playbackSpeed}x",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = CycleRideTrackerTheme.colors.onSurface
+                                )
                             }
                         }
                     }
@@ -346,7 +382,7 @@ fun ReplayJourneyScreen(
                     ButtonGroup(
                         overflowIndicator = { menuState ->
                             IconButton(onClick = { menuState.show() }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "More speeds")
+                                Icon(Icons.Default.MoreVert, contentDescription = "More speeds", tint = CycleRideTrackerTheme.colors.onSurface)
                             }
                         },
                         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -362,7 +398,7 @@ fun ReplayJourneyScreen(
                                     val layoutDirection = LocalLayoutDirection.current
                                     val contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                                     val compressionLimit = contentPadding.calculateEndPadding(layoutDirection)
-                                    
+
                                     val shapes = when (index) {
                                         0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                                         speeds.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
@@ -377,6 +413,14 @@ fun ReplayJourneyScreen(
                                                 AppHaptics.performAction(haptic)
                                             }
                                         },
+                                        colors = ToggleButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.surface,
+                                            contentColor = MaterialTheme.colorScheme.onSurface,
+                                            disabledContainerColor = MaterialTheme.colorScheme.surface,
+                                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            checkedContainerColor = MaterialTheme.colorScheme.primary,
+                                            checkedContentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
                                         shapes = shapes,
                                         contentPadding = contentPadding,
                                         modifier = Modifier
@@ -435,22 +479,40 @@ fun ReplayTelemetryCard(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         color = CycleRideTrackerTheme.colors.cardBackground,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Navy700)
+        border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.outline)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Icon(icon, contentDescription = null, tint = CycleRideTrackerTheme.colors.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = CycleRideTrackerTheme.colors.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
                 Spacer(Modifier.width(6.dp))
-                Text(label, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = CycleRideTrackerTheme.colors.onSurfaceVariant)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurfaceVariant
+                )
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
-                Text(value, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
                 Spacer(Modifier.width(4.dp))
-                Text(unit, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = CycleRideTrackerTheme.colors.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
+                Text(
+                    unit,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
             }
         }
     }
@@ -474,4 +536,3 @@ fun ReplayJourneyPreview() {
         )
     }
 }
-

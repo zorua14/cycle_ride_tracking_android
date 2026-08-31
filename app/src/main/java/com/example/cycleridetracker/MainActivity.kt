@@ -225,12 +225,12 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
 
                             (slideIntoContainer(
                                 towards = direction,
-                                animationSpec = tween(400)
-                            ) + fadeIn(animationSpec = tween(400))) togetherWith
+                                animationSpec = tween(280)
+                            ) + fadeIn(animationSpec = tween(280))) togetherWith
                                     (slideOutOfContainer(
                                         towards = direction,
-                                        animationSpec = tween(400)
-                                    ) + fadeOut(animationSpec = tween(400)))
+                                        animationSpec = tween(280)
+                                    ) + fadeOut(animationSpec = tween(280)))
                         }
                     },
                     modifier = Modifier.fillMaxSize()

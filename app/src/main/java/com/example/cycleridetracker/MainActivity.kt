@@ -106,6 +106,7 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
         val nextScreen = when (currentScreen) {
             "RideDetail" -> previousScreen
             "ReplayJourney" -> "RideDetail"
+            "ActiveRide" -> "Dashboard"
             else -> "Dashboard"
         }
 
@@ -139,6 +140,8 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                         FloatingToolbarDefaults.VibrantFloatingActionButton(
                             onClick = {
                                 AppHaptics.performAction(haptic)
+                                previousScreen = currentScreen
+                                currentScreen = "ActiveRide"
                             },
                             shape = RoundedCornerShape(16.dp),
                         ) {
@@ -202,17 +205,18 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
 
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             SharedTransitionLayout {
-                val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney")
+                val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney", "ActiveRide")
                 AnimatedContent(
                     targetState = when (currentScreen) {
                         "RideDetail" -> "RideDetail"
                         "ReplayJourney" -> "ReplayJourney"
+                        "ActiveRide" -> "ActiveRide"
                         else -> currentScreen
                     },
                     label = "ScreenTransition",
                     transitionSpec = {
-                        if ((initialState in listOf("RideDetail", "ReplayJourney")) ||
-                            (targetState in listOf("RideDetail", "ReplayJourney"))) {
+                        if ((initialState in listOf("RideDetail", "ReplayJourney", "ActiveRide")) ||
+                            (targetState in listOf("RideDetail", "ReplayJourney", "ActiveRide"))) {
                             fadeIn(tween(600)) togetherWith fadeOut(tween(600))
                         } else {
                             val initialIndex = items.indexOf(initialState)
@@ -236,7 +240,7 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 ) { screen ->
                     Column(modifier = Modifier.fillMaxSize()) {
-                        if (screen !in listOf("RideDetail", "ReplayJourney")) {
+                        if (screen !in listOf("RideDetail", "ReplayJourney", "ActiveRide")) {
                             LargeTopAppBar(
                                 title = {
                                     Text(
@@ -350,6 +354,14 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
                             )
                             "Insights" -> InsightsContent(contentPadding)
                             "Settings" -> SettingsContent(onThemeChanged, contentPadding)
+                            "ActiveRide" -> ActiveRideScreen(
+                                onBack = {
+                                    currentScreen = "Dashboard"
+                                },
+                                onFinish = {
+                                    currentScreen = "Dashboard"
+                                }
+                            )
                             else -> Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
                                 Text("Coming Soon: $screen", color = CycleRideTrackerTheme.colors.onSurface)
                             }

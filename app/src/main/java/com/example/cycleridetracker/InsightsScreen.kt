@@ -4,33 +4,46 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
+import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
+import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLabelComponent
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModel
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
+import com.patrykandpatrick.vico.compose.cartesian.data.ColumnCartesianLayerModel
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
+import com.patrykandpatrick.vico.compose.cartesian.layer.ColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
+import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
+import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerVisibilityListener
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
+import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import kotlin.math.roundToInt
 
 @Composable
@@ -54,21 +67,21 @@ fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
         }
 
         item {
-            GoalProgressCard(selectedRange)
+            GoalProgressCard(selectedRange = selectedRange)
         }
 
         item {
-            InsightsSectionTitle("DISTANCE VISUALIZATION")
-            DistanceVisualizationCard(selectedRange)
+            InsightsSectionTitle(title = "DISTANCE VISUALIZATION")
+            DistanceVisualizationCard(selectedRange = selectedRange)
         }
 
         item {
-            InsightsSectionTitle("RIDE PERFORMANCE METRICS")
+            InsightsSectionTitle(title = "RIDE PERFORMANCE METRICS")
             PerformanceMetricsGrid()
         }
 
         item {
-            InsightsSectionTitle("ENVIRONMENTAL & CO2 FOOTPRINT")
+            InsightsSectionTitle(title = "ENVIRONMENTAL & CO2 FOOTPRINT")
             EnvironmentalPlaceholder()
         }
     }
@@ -83,7 +96,8 @@ fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier.fillMaxWidth()
     ) {
-        options.forEachIndexed { index, option ->
+        for (index in options.indices) {
+            val option = options[index]
             SegmentedButton(
                 selected = selected == option,
                 onClick = { onSelected(option) },
@@ -102,10 +116,11 @@ fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
                             modifier = Modifier.size(SegmentedButtonDefaults.IconSize)
                         )
                     }
+                },
+                label = {
+                    Text(text = option, style = MaterialTheme.typography.labelLarge)
                 }
-            ) {
-                Text(option, style = MaterialTheme.typography.labelLarge)
-            }
+            )
         }
     }
 }
@@ -226,174 +241,141 @@ fun DistanceVisualizationCard(selectedRange: String) {
 }
 
 @Composable
-fun BarChartMock() {
+fun rememberMarkerHapticListener(): CartesianMarkerVisibilityListener {
     val haptic = LocalHapticFeedback.current
-    val data = listOf(0.4f, 0.45f, 0.1f, 0.42f, 0.46f, 0.8f, 0.15f)
-    val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    var activeIndex by remember { mutableIntStateOf(-1) }
-
-    val colors = CycleRideTrackerTheme.colors
-
-    Column {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .pointerInput(data.size) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            val index = (offset.x / size.width * data.size).toInt().coerceIn(0, data.size - 1)
-                            if (index != activeIndex) {
-                                activeIndex = index
-                                AppHaptics.performAction(haptic)
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            val index = (change.position.x / size.width * data.size).toInt().coerceIn(0, data.size - 1)
-                            if (index != activeIndex) {
-                                activeIndex = index
-                                AppHaptics.performAction(haptic)
-                            }
-                        },
-                        onDragEnd = { activeIndex = -1 },
-                        onDragCancel = { activeIndex = -1 }
-                    )
-                }
-        ) {
-            val primaryColor = colors.primary
-            val outlineVariant = colors.outline
-
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val barWidth = size.width / (data.size * 2)
-                val spacing = size.width / data.size
-
-                data.forEachIndexed { index, value ->
-                    val x = index * spacing + spacing / 2
-                    val height = value * size.height
-
-                    // Background track
-                    drawRoundRect(
-                        color = outlineVariant.copy(alpha = 0.3f),
-                        topLeft = Offset(x - barWidth / 2, 0f),
-                        size = Size(barWidth, size.height),
-                        cornerRadius = CornerRadius(4.dp.toPx())
-                    )
-
-                    // Active bar
-                    drawRoundRect(
-                        color = if (index == activeIndex) primaryColor else primaryColor.copy(alpha = 0.7f),
-                        topLeft = Offset(x - barWidth / 2, size.height - height),
-                        size = Size(barWidth, height),
-                        cornerRadius = CornerRadius(4.dp.toPx())
-                    )
+    var lastX by remember { mutableStateOf<Double?>(null) }
+    return remember(haptic) {
+        object : CartesianMarkerVisibilityListener {
+            override fun onShown(marker: CartesianMarker, targets: List<CartesianMarker.Target>) {
+                val newX = targets.firstOrNull()?.x
+                if (newX != lastX) {
+                    AppHaptics.performAction(haptic)
+                    lastX = newX
                 }
             }
-        }
 
-        Spacer(Modifier.height(8.dp))
+            override fun onUpdated(marker: CartesianMarker, targets: List<CartesianMarker.Target>) {
+                val newX = targets.firstOrNull()?.x
+                if (newX != lastX) {
+                    AppHaptics.performAction(haptic)
+                    lastX = newX
+                }
+            }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-            labels.forEach { label ->
-                Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            override fun onHidden(marker: CartesianMarker) {
+                lastX = null
             }
         }
     }
 }
 
 @Composable
-fun LineChartMock() {
-    val haptic = LocalHapticFeedback.current
-    val data = listOf(0.1f, 0.2f, 0.35f, 0.42f, 0.58f, 0.7f, 0.9f)
-    val labels = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
-    var activeIndex by remember { mutableIntStateOf(-1) }
+fun BarChartMock() {
+    val data = listOf(0.4f, 0.45f, 0.1f, 0.42f, 0.46f, 0.8f, 0.15f)
+    val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    
+    val model = remember(data) {
+        CartesianChartModel(
+            ColumnCartesianLayerModel.build { series(data) }
+        )
+    }
+    
+    val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
+        labels.getOrNull(value.toInt()) ?: ""
+    }
 
     val colors = CycleRideTrackerTheme.colors
-    val primaryColor = colors.primary
 
-    Column {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .pointerInput(data.size) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            val index = (offset.x / size.width * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
-                            if (index != activeIndex) {
-                                activeIndex = index
-                                AppHaptics.performAction(haptic)
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            val index = (change.position.x / size.width * (data.size - 1)).roundToInt().coerceIn(0, data.size - 1)
-                            if (index != activeIndex) {
-                                activeIndex = index
-                                AppHaptics.performAction(haptic)
-                            }
-                        },
-                        onDragEnd = { activeIndex = -1 },
-                        onDragCancel = { activeIndex = -1 }
-                    )
-                }
-        ) {
-            val onPrimaryColor = colors.background
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val spacing = size.width / (data.size - 1)
-                val path = Path()
-                val fillPath = Path()
-
-                data.forEachIndexed { index, value ->
-                    val x = index * spacing
-                    val y = size.height - (value * size.height)
-                    if (index == 0) {
-                        path.moveTo(x, y)
-                        fillPath.moveTo(x, size.height)
-                        fillPath.lineTo(x, y)
-                    } else {
-                        path.lineTo(x, y)
-                        fillPath.lineTo(x, y)
-                    }
-                    if (index == data.size - 1) {
-                        fillPath.lineTo(x, size.height)
-                        fillPath.close()
-                    }
-                }
-
-                drawPath(
-                    path = fillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(primaryColor.copy(alpha = 0.3f), Color.Transparent)
+    CartesianChartHost(
+        chart = rememberCartesianChart(
+            rememberColumnCartesianLayer(
+                columnProvider = ColumnCartesianLayer.ColumnProvider.series(
+                    rememberLineComponent(
+                        fill = Fill(colors.primary),
+                        thickness = 12.dp,
+                        shape = RoundedCornerShape(4.dp)
                     )
                 )
-
-                drawPath(
-                    path = path,
-                    color = primaryColor,
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            ),
+            startAxis = VerticalAxis.rememberStart(
+                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                line = null,
+                tick = null,
+                guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
+            ),
+            bottomAxis = HorizontalAxis.rememberBottom(
+                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                line = null,
+                tick = null,
+                valueFormatter = bottomAxisValueFormatter
+            ),
+            marker = rememberDefaultCartesianMarker(
+                label = rememberTextComponent(
+                    style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
+                    background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
                 )
+            ),
+            markerVisibilityListener = rememberMarkerHapticListener()
+        ),
+        model = model,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+    )
+}
 
-                data.forEachIndexed { index, value ->
-                    val x = index * spacing
-                    val y = size.height - (value * size.height)
-                    val radius = if (index == activeIndex) 6.dp.toPx() else 4.dp.toPx()
-                    val color = if (index == activeIndex) onPrimaryColor else primaryColor
+@Composable
+fun LineChartMock() {
+    val data = listOf(0.1f, 0.2f, 0.35f, 0.42f, 0.58f, 0.7f, 0.9f)
+    val labels = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
 
-                    if (index == activeIndex) {
-                        drawCircle(color = primaryColor, radius = radius + 2.dp.toPx(), center = Offset(x, y))
-                    }
-                    drawCircle(color = color, radius = radius, center = Offset(x, y))
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            labels.forEach { label ->
-                Text(label, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-            }
-        }
+    val model = remember(data) {
+        CartesianChartModel(
+            LineCartesianLayerModel.build { series(data) }
+        )
     }
+
+    val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
+        labels.getOrNull(value.toInt()) ?: ""
+    }
+
+    val colors = CycleRideTrackerTheme.colors
+
+    CartesianChartHost(
+        chart = rememberCartesianChart(
+            rememberLineCartesianLayer(
+                lineProvider = LineCartesianLayer.LineProvider.series(
+                    LineCartesianLayer.rememberLine(
+                        fill = LineCartesianLayer.LineFill.single(Fill(colors.primary)),
+                        areaFill = LineCartesianLayer.AreaFill.single(Fill(colors.primary.copy(alpha = 0.2f)))
+                    )
+                )
+            ),
+            startAxis = VerticalAxis.rememberStart(
+                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                line = null,
+                tick = null,
+                guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
+            ),
+            bottomAxis = HorizontalAxis.rememberBottom(
+                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                line = null,
+                tick = null,
+                valueFormatter = bottomAxisValueFormatter
+            ),
+            marker = rememberDefaultCartesianMarker(
+                label = rememberTextComponent(
+                    style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
+                    background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
+                )
+            ),
+            markerVisibilityListener = rememberMarkerHapticListener()
+        ),
+        model = model,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+    )
 }
 
 @Composable

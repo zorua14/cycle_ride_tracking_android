@@ -4,6 +4,7 @@ import android.graphics.*
 import android.graphics.drawable.BitmapDrawable
 import android.content.Context
 import android.util.Log
+import androidx.core.content.ContextCompat
 import coil.Coil
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -73,6 +74,62 @@ object MarkerUtils {
         }
         
         return result
+    }
+
+    fun getBikeMarkerBitmap(): Bitmap {
+        val size = 100
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        
+        // Background Circle (Cyan 400 from theme)
+        paint.color = 0xFF81D4FA.toInt()
+        canvas.drawCircle(size / 2f, size / 2f, size / 2.5f, paint)
+        
+        // White border
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.WHITE
+        paint.strokeWidth = 3f
+        canvas.drawCircle(size / 2f, size / 2f, size / 2.5f, paint)
+        
+        // Improved Bicycle Icon (Navy 700 from theme for contrast)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        paint.color = 0xFF1E293B.toInt()
+        
+        // Wheels
+        canvas.drawCircle(size * 0.32f, size * 0.62f, size * 0.12f, paint) // Rear wheel
+        canvas.drawCircle(size * 0.68f, size * 0.62f, size * 0.12f, paint) // Front wheel
+        
+        // Frame
+        val path = Path()
+        path.moveTo(size * 0.32f, size * 0.62f) // Rear hub
+        path.lineTo(size * 0.45f, size * 0.48f) // Seat post bottom
+        path.lineTo(size * 0.65f, size * 0.48f) // Top tube front
+        path.lineTo(size * 0.5f, size * 0.62f) // Bottom bracket
+        path.lineTo(size * 0.32f, size * 0.62f) // Back to rear hub
+        
+        path.moveTo(size * 0.45f, size * 0.48f)
+        path.lineTo(size * 0.5f, size * 0.62f) // Seat tube
+        
+        path.moveTo(size * 0.65f, size * 0.48f)
+        path.lineTo(size * 0.68f, size * 0.62f) // Fork
+        
+        // Handlebars
+        path.moveTo(size * 0.65f, size * 0.48f)
+        path.lineTo(size * 0.68f, size * 0.42f)
+        path.lineTo(size * 0.62f, size * 0.42f)
+        
+        // Seat
+        path.moveTo(size * 0.45f, size * 0.48f)
+        path.lineTo(size * 0.45f, size * 0.42f)
+        path.lineTo(size * 0.40f, size * 0.42f)
+        path.lineTo(size * 0.50f, size * 0.42f)
+        
+        canvas.drawPath(path, paint)
+        
+        return bitmap
     }
 
     suspend fun loadMarkerBitmap(context: Context, uri: String): Bitmap? {

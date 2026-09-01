@@ -53,6 +53,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.example.cycleridetracker.ui.utils.MarkerUtils
+import com.example.cycleridetracker.ui.utils.ConnectivityObserver
+import com.example.cycleridetracker.ui.utils.NetworkConnectivityObserver
 import de.afarber.openmapview.BitmapDescriptor
 import de.afarber.openmapview.LatLng
 import de.afarber.openmapview.Polyline
@@ -73,6 +75,12 @@ fun RideDetailScreen(
     val ride by viewModel.ride.collectAsStateWithLifecycle()
     val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val networkStatus by connectivityObserver.observe().collectAsState(
+        initial = ConnectivityObserver.Status.Available
+    )
 
     if (ride == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -83,7 +91,6 @@ fun RideDetailScreen(
 
     val currentRide = ride!!
     val rideData = currentRide.toRideData(useMetric)
-    val context = LocalContext.current
     val photoMarkers = remember { mutableStateMapOf<String, android.graphics.Bitmap>() }
     
     var fullScreenPhotoUri by remember { mutableStateOf<String?>(null) }
@@ -196,6 +203,35 @@ fun RideDetailScreen(
                             .clip(RoundedCornerShape(24.dp))
                             .background(CycleRideTrackerTheme.colors.cardBackground)
                     ) {
+                        if (networkStatus != ConnectivityObserver.Status.Available) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        Icons.Default.CloudOff,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "No Internet Connection",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                    Text(
+                                        "Map tiles cannot be loaded",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+
                         AndroidView(
                             factory = { context ->
                                 de.afarber.openmapview.OpenMapView(context)

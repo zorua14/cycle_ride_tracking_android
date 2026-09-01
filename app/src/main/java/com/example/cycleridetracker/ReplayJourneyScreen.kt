@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -31,6 +32,8 @@ import com.example.cycleridetracker.data.Ride
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.example.cycleridetracker.ui.utils.MarkerUtils
+import com.example.cycleridetracker.ui.utils.ConnectivityObserver
+import com.example.cycleridetracker.ui.utils.NetworkConnectivityObserver
 import de.afarber.openmapview.BitmapDescriptor
 import de.afarber.openmapview.LatLng
 import de.afarber.openmapview.Polyline
@@ -39,7 +42,6 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.compose.ui.platform.LocalContext
-import android.graphics.Bitmap
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -49,11 +51,22 @@ fun ReplayJourneyScreen(
     onBack: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
     val rideData = ride.toRideData(useMetric)
     var isPlaying by rememberSaveable { mutableStateOf(value = false) }
+
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val networkStatus by connectivityObserver.observe().collectAsState(
+        initial = ConnectivityObserver.Status.Available
+    )
+    
+    val pathPoints = remember(ride.pathPoints) { 
+        ride.pathPoints.map { LatLng(it.latitude, it.longitude) } 
+    }
+    
     var currentFrame by rememberSaveable { mutableIntStateOf(0) }
-    val totalFrames = 100 
-    var playbackSpeed by rememberSaveable { mutableIntStateOf(2) }
+    val totalFrames = remember(pathPoints) { pathPoints.size.coerceAtLeast(1) }
+    var playbackSpeed by rememberSaveable { mutableFloatStateOf(1f) }
     val scrollState = rememberScrollState()
 
     // Map control states
@@ -67,26 +80,51 @@ fun ReplayJourneyScreen(
         }
     }
 
-    val pathPoints = ride.pathPoints.map { LatLng(it.latitude, it.longitude) }
-    val context = LocalContext.current
-    val photoMarkers = remember { mutableStateMapOf<String, Bitmap>() }
-
-    LaunchedEffect(ride.photos) {
-        ride.photos.forEach { photo ->
-            if (photo.latitude != null && !photoMarkers.containsKey(photo.uri)) {
-                val markerBitmap = MarkerUtils.loadMarkerBitmap(context, photo.uri)
-                if (markerBitmap != null) {
-                    photoMarkers[photo.uri] = markerBitmap
-                }
-            }
-        }
-    }
+    val bikeBitmap = remember { MarkerUtils.getBikeMarkerBitmap() }
 
     LaunchedEffect(isPlaying, playbackSpeed) {
         if (isPlaying) {
-            while (currentFrame < totalFrames) {
-                delay((1000L / playbackSpeed / 10).milliseconds)
-                currentFrame++
+            if (currentFrame >= totalFrames - 1) {
+                isPlaying = false
+                return@LaunchedEffect
+            }
+
+            // 1x = 250 frames per second.
+            val baseFps = 250.0 
+            var lastTime = android.os.SystemClock.elapsedRealtime()
+            var subFrame = currentFrame.toDouble()
+            
+            while (isPlaying && currentFrame < totalFrames - 1) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                val deltaTimeSec = (now - lastTime) / 1000.0
+                lastTime = now
+
+                // Check for photos nearby to slow down
+                val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
+                val currentPoint = pathPoints.getOrNull(pointIndex)
+                val isNearPhoto = currentPoint?.let { cp ->
+                    ride.photos.any { photo ->
+                        if (photo.latitude != null && photo.longitude != null) {
+                            val distanceResults = FloatArray(1)
+                            android.location.Location.distanceBetween(
+                                cp.latitude, cp.longitude,
+                                photo.latitude, photo.longitude,
+                                distanceResults
+                            )
+                            distanceResults[0] <= 40f // detect photo 40m ahead/around
+                        } else false
+                    }
+                } ?: false
+
+                // If near a photo, drop to 50 FPS (slow motion) regardless of selected speed
+                // to give the user time to see the waypoint.
+                val effectiveFps = if (isNearPhoto) 50.0 else (baseFps * playbackSpeed)
+                
+                subFrame += effectiveFps * deltaTimeSec
+                currentFrame = subFrame.toInt().coerceAtMost(totalFrames - 1)
+                
+                if (currentFrame >= totalFrames - 1) break
+                delay(16.milliseconds)
             }
             isPlaying = false
         }
@@ -105,11 +143,6 @@ fun ReplayJourneyScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { AppHaptics.performAction(haptic) }) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Download")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -136,6 +169,35 @@ fun ReplayJourneyScreen(
                     .clip(RoundedCornerShape(24.dp))
                     .background(CycleRideTrackerTheme.colors.cardBackground)
             ) {
+                if (networkStatus != ConnectivityObserver.Status.Available) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "No Internet Connection",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                "Map tiles cannot be loaded",
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+                
                 AndroidView(
                     factory = { context ->
                         de.afarber.openmapview.OpenMapView(context)
@@ -145,37 +207,28 @@ fun ReplayJourneyScreen(
                                 if (pathPoints.isNotEmpty()) {
                                     mapView.clear()
                                     
-                                    val pointIndex = (currentFrame.toFloat() / totalFrames * (pathPoints.size - 1)).toInt()
-                                    val isComplete = currentFrame >= totalFrames
+                                    val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
+                                    val isComplete = currentFrame >= totalFrames - 1
                                     
                                     // PROGRESSIVE PATH: Draw only up to current frame to "cover" the traveled path
                                     val visiblePoints = pathPoints.take(pointIndex + 1)
                                     if (visiblePoints.size >= 2) {
                                         val polyline = Polyline(
                                             points = visiblePoints,
-                                            strokeColor = androidx.compose.ui.graphics.Color.Cyan,
+                                            strokeColor = Color.Cyan,
                                             strokeWidth = 10f
                                         )
                                         mapView.addPolyline(polyline)
                                     }
 
-                                    // PHOTO MARKERS: Only show if reached in playback, or playback is complete
-                                    ride.photos.forEachIndexed { index, photo ->
-                                        val photoFrame = (index + 1) * totalFrames / (ride.photos.size + 1)
-                                        if (photo.latitude != null && photo.longitude != null && (photoFrame <= currentFrame || isComplete)) {
-                                            val customBitmap = photoMarkers[photo.uri]
-                                            val markerIcon = if (customBitmap != null) {
-                                                BitmapDescriptor.BitmapMarker(customBitmap)
-                                            } else null
-
-                                            mapView.addMarker(Marker(
-                                                position = LatLng(photo.latitude, photo.longitude),
-                                                title = "Photo",
-                                                icon = markerIcon,
-                                                anchor = 0.5f to 1.0f
-                                            ))
-                                        }
-                                    }
+                                    // RIDER MARKER
+                                    val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
+                                    mapView.addMarker(Marker(
+                                        position = currentPoint,
+                                        title = "Rider",
+                                        icon = BitmapDescriptor.BitmapMarker(bikeBitmap),
+                                        anchor = 0.5f to 0.5f
+                                    ))
 
                                     // CAMERA HANDLING:
                                     // 1. Zoom out only when complete (once)
@@ -206,36 +259,25 @@ fun ReplayJourneyScreen(
                             }
                 )
                 
-                // Photo Waypoint Overlay
-                val photoWaypoints = ride.photos.mapIndexed { index, photo ->
-                    val frame = (index + 1) * totalFrames / (ride.photos.size + 1)
-                    frame to photo.uri
-                }
-                
-                val activePhoto = photoWaypoints.find { currentFrame in (it.first - 5)..(it.first + 5) }
+                // Photo Waypoint Overlay (Proximity check: 20 meters)
+                val currentPoint = if (pathPoints.isNotEmpty()) {
+                    val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
+                    pathPoints.getOrElse(pointIndex) { pathPoints.last() }
+                } else null
 
-                Surface(
-                    modifier = Modifier.padding(16.dp).align(Alignment.TopStart),
-                    shape = RoundedCornerShape(12.dp),
-                    color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.8f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.outline)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Speed,
-                            contentDescription = null,
-                            tint = CycleRideTrackerTheme.colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "%.1f KM/H".format(ride.averageSpeedKmh),
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = CycleRideTrackerTheme.colors.onSurface
-                        )
+                val activePhoto = remember(currentPoint, ride.photos) {
+                    currentPoint?.let { cp ->
+                        ride.photos.find { photo ->
+                            if (photo.latitude != null && photo.longitude != null) {
+                                val results = FloatArray(1)
+                                android.location.Location.distanceBetween(
+                                    cp.latitude, cp.longitude,
+                                    photo.latitude, photo.longitude,
+                                    results
+                                )
+                                results[0] <= 30f // 30 meters
+                            } else false
+                        }
                     }
                 }
 
@@ -248,7 +290,7 @@ fun ReplayJourneyScreen(
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                 ) {
-                    activePhoto?.let { (_, uri) ->
+                    activePhoto?.let { photo ->
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.9f),
@@ -263,7 +305,7 @@ fun ReplayJourneyScreen(
                                     modifier = Modifier.size(60.dp)
                                 ) {
                                     AsyncImage(
-                                        model = uri,
+                                        model = photo.uri,
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
@@ -289,8 +331,8 @@ fun ReplayJourneyScreen(
             }
 
             val totalDistValue = rideData.distance.replace(" km", "").toDoubleOrNull() ?: 9.2
-            val currentDist = (totalDistValue * currentFrame / totalFrames)
-            val progressPercent = (currentFrame * 100 / totalFrames)
+            val currentDist = (totalDistValue * currentFrame / (totalFrames - 1).coerceAtLeast(1))
+            val progressPercent = (currentFrame * 100 / totalFrames.coerceAtLeast(1))
 
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -325,7 +367,7 @@ fun ReplayJourneyScreen(
                 Slider(
                     value = currentFrame.toFloat(),
                     onValueChange = { currentFrame = it.toInt() },
-                    valueRange = 0f..totalFrames.toFloat(),
+                    valueRange = 0f..(totalFrames - 1).toFloat().coerceAtLeast(0f),
                     colors = SliderDefaults.colors(
                         thumbColor = CycleRideTrackerTheme.colors.primary,
                         activeTrackColor = CycleRideTrackerTheme.colors.primary,
@@ -374,7 +416,7 @@ fun ReplayJourneyScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    "${playbackSpeed}x",
+                                    if (playbackSpeed >= 1f) "${playbackSpeed.toInt()}x" else "${playbackSpeed}x",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                     color = CycleRideTrackerTheme.colors.onSurface
                                 )
@@ -384,7 +426,7 @@ fun ReplayJourneyScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    val speeds = listOf(1, 2, 5, 10)
+                    val speeds = listOf(1f, 5f, 10f, 20f)
 
                     ButtonGroup(
                         overflowIndicator = { menuState ->
@@ -444,7 +486,7 @@ fun ReplayJourneyScreen(
                                                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                                             }
                                             Text(
-                                                text = "${speed}x",
+                                                text = if (speed >= 1f) "${speed.toInt()}x" else "${speed}x",
                                                 maxLines = 1, softWrap = false,
                                                 overflow = TextOverflow.Visible
                                             )
@@ -454,7 +496,7 @@ fun ReplayJourneyScreen(
                                 menuContent = { menuState ->
                                     val isSelected = playbackSpeed == speed
                                     DropdownMenuItem(
-                                        text = { Text("${speed}x") },
+                                        text = { Text(if (speed >= 1f) "${speed.toInt()}x" else "${speed}x") },
                                         leadingIcon = if (isSelected) {
                                             { Icon(Icons.Default.Check, contentDescription = null) }
                                         } else null,

@@ -4,11 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.DirectionsBike
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.cycleridetracker.ui.components.RecentRideCard
 import com.example.cycleridetracker.ui.components.RideData
@@ -16,75 +19,123 @@ import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.animation.*
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.data.Ride
+import com.example.cycleridetracker.ui.HistoryViewModel
+
 @Composable
 fun HistoryContent(
     contentPadding: PaddingValues = PaddingValues(16.dp),
-    onRideClick: (RideData) -> Unit = {},
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    onRideClick: (Ride) -> Unit = {},
+    viewModel: HistoryViewModel = hiltViewModel()
 ) {
     val haptic = LocalHapticFeedback.current
-    
-    val rides = listOf(
-        RideData("Morning Downtown Ride", "Thu, Aug 27 • 4:45 PM", "8.4 km", "28:00", "19.8 km/h", true),
-        RideData("Sunset Riverbank Return", "Wed, Aug 26 • 5:45 PM", "9.2 km", "30:20", "20.4 km/h", false),
-        RideData("Weekend Twin Peaks Loop", "Mon, Aug 24 • 2:45 PM", "18.6 km", "53:20", "22.5 km/h", true),
-        RideData("Neighborhood Errand Run", "Sat, Aug 22 • 1:45 PM", "3.2 km", "11:20", "16.8 km/h", false),
-        RideData("Morning Downtown Ride", "Thu, Aug 27 • 4:45 PM", "8.4 km", "28:00", "19.8 km/h", true),
-        RideData("Sunset Riverbank Return", "Wed, Aug 26 • 5:45 PM", "9.2 km", "30:20", "20.4 km/h", false),
-        RideData("Weekend Twin Peaks Loop", "Mon, Aug 24 • 2:45 PM", "18.6 km", "53:20", "22.5 km/h", true),
-        RideData("Neighborhood Errand Run", "Sat, Aug 22 • 1:45 PM", "3.2 km", "11:20", "16.8 km/h", false)
-    )
+    val allRides by viewModel.allRides.collectAsStateWithLifecycle()
+    val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            OutlinedTextField(
-                value = "",
-                onValueChange = {},
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search rides, locations, notes...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = CycleRideTrackerTheme.colors.cardBackground,
-                    focusedContainerColor = CycleRideTrackerTheme.colors.cardBackground,
-                    unfocusedBorderColor = CycleRideTrackerTheme.colors.outline.copy(alpha = 0.3f)
+    val isEmpty = allRides.isEmpty() && searchQuery.isEmpty()
+
+    if (isEmpty) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Surface(
+                    modifier = Modifier.size(120.dp),
+                    color = CycleRideTrackerTheme.colors.cardBackground,
+                    shape = MaterialTheme.shapes.extraLarge
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.DirectionsBike,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    "No Rides Yet",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
                 )
-            )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Your completed cycling journeys will appear here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CycleRideTrackerTheme.colors.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
-        
-        items(rides) { ride ->
-            RecentRideCard(
-                ride = ride,
-                haptic = haptic,
-                keyPrefix = "history",
-                onClick = { onRideClick(ride) },
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope
-            )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = contentPadding,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.onSearchQueryChange(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search rides, notes...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = CycleRideTrackerTheme.colors.cardBackground,
+                        focusedContainerColor = CycleRideTrackerTheme.colors.cardBackground,
+                        unfocusedBorderColor = CycleRideTrackerTheme.colors.outline.copy(alpha = 0.3f)
+                    )
+                )
+            }
+            
+            if (allRides.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No results for \"$searchQuery\"",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = CycleRideTrackerTheme.colors.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                items(allRides) { ride ->
+                    RecentRideCard(
+                        ride = ride.toRideData(useMetric),
+                        haptic = haptic,
+                        hapticsEnabled = hapticsEnabled,
+                        onClick = { onRideClick(ride) }
+                    )
+                }
+            }
         }
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Preview(showBackground = true)
 @Composable
 fun HistoryPreview() {
     CycleRideTrackerTheme(darkTheme = true) {
         Surface(color = MaterialTheme.colorScheme.background) {
-            SharedTransitionLayout {
-                AnimatedVisibility(visible = true) {
-                    HistoryContent(
-                        sharedTransitionScope = this@SharedTransitionLayout,
-                        animatedVisibilityScope = this@AnimatedVisibility
-                    )
-                }
-            }
+            HistoryContent()
         }
     }
 }

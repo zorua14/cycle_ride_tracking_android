@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -14,8 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Tune
@@ -34,53 +33,65 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.cycleridetracker.data.ThemePrefs
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
-import com.example.cycleridetracker.ui.components.RideData
+import com.example.cycleridetracker.data.Ride
+import com.example.cycleridetracker.data.ActiveRideState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 
-val RideDataSaver = listSaver<RideData?, Any>(
-    save = { 
-        if (it == null) emptyList() 
-        else listOf(it.title, it.time, it.distance, it.duration, it.avgSpeed, it.isFavorite) 
-    },
-    restore = { 
-        if (it.isEmpty()) null 
-        else RideData(
-            title = it[0] as String,
-            time = it[1] as String,
-            distance = it[2] as String,
-            duration = it[3] as String,
-            avgSpeed = it[4] as String,
-            isFavorite = it[5] as Boolean
-        ) 
-    }
-)
+import dagger.hilt.android.AndroidEntryPoint
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.ui.ActiveRideViewModel
+import com.example.cycleridetracker.ui.DashboardViewModel
+import com.example.cycleridetracker.ui.HistoryViewModel
+import com.example.cycleridetracker.ui.SortOption
+import com.example.cycleridetracker.ui.SortOrder
+import com.example.cycleridetracker.ui.FilterOption
+import com.example.cycleridetracker.ui.components.ActiveRideIndicator
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 
+import com.example.cycleridetracker.ui.SettingsViewModel
+
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+import android.location.LocationManager
+import android.provider.Settings
+import android.content.Context
+import kotlinx.coroutines.flow.map
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
-            val themeMode = remember { mutableStateOf(ThemePrefs.getTheme(context)) }
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val themeMode by settingsViewModel.theme.collectAsStateWithLifecycle()
 
-            val isDarkTheme = when (themeMode.value) {
+            val isDarkTheme = when (themeMode) {
                 "Light" -> false
                 "Dark" -> true
                 else -> isSystemInDarkTheme()
             }
 
-            val useDynamicColor = themeMode.value == "System"
+            val useDynamicColor = themeMode == "System"
 
             CycleRideTrackerTheme(
                 darkTheme = isDarkTheme,
                 dynamicColor = useDynamicColor,
             ) {
-                MainApp { themeMode.value = it }
+                MainApp()
             }
         }
     }
@@ -88,11 +99,66 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MainApp(onThemeChanged: (String) -> Unit) {
+fun MainApp(
+    settingsViewModel: SettingsViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val hapticsEnabled by settingsViewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val useMetric by settingsViewModel.useMetric.collectAsStateWithLifecycle()
+    
+    val activeRideViewModel: ActiveRideViewModel = hiltViewModel()
+    val activeState by activeRideViewModel.activeRideState.collectAsStateWithLifecycle()
+    val isRideActive = activeState is ActiveRideState.Tracking
+
+    // Auto-resume service if ride is active in repository (recovered from DB)
+    LaunchedEffect(isRideActive) {
+        if (isRideActive) {
+            val locationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                                  ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            
+            if (locationGranted) {
+                activeRideViewModel.startRide()
+            }
+        }
+    }
+
     var currentScreen by rememberSaveable { mutableStateOf("Dashboard") }
     var previousScreen by rememberSaveable { mutableStateOf("Dashboard") }
-    var selectedRide by rememberSaveable(stateSaver = RideDataSaver) { mutableStateOf<RideData?>(null) }
+    var showActiveRideSheet by rememberSaveable { mutableStateOf(false) }
+    var selectedRide by rememberSaveable { mutableStateOf<Ride?>(null) }
+    
+    var showLocationOffDialog by remember { mutableStateOf(false) }
+
+    fun checkLocationAndNavigate() {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        
+        if (isGpsEnabled || isNetworkEnabled) {
+            showActiveRideSheet = true
+        } else {
+            showLocationOffDialog = true
+        }
+    }
+
+    // Permission handling
+    val permissions = arrayOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.POST_NOTIFICATIONS
+    )
+    
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val fineLocationGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseLocationGranted = result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        
+        if (fineLocationGranted || coarseLocationGranted) {
+            checkLocationAndNavigate()
+        }
+    }
 
     val floatingToolbarState = rememberFloatingToolbarState()
     val floatingToolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(
@@ -102,27 +168,75 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
 
     val toolbarScreens = listOf("Dashboard", "History", "Insights", "Settings")
 
-    BackHandler(enabled = currentScreen != "Dashboard") {
-        val nextScreen = when (currentScreen) {
-            "RideDetail" -> previousScreen
-            "ReplayJourney" -> "RideDetail"
-            "ActiveRide" -> "Dashboard"
-            else -> "Dashboard"
-        }
-
-        // Immediate toolbar state adjustment for flicker-free transitions
-        if (nextScreen !in toolbarScreens) {
-            floatingToolbarState.offset = -2000f // Force hide
+    BackHandler(enabled = showActiveRideSheet || currentScreen != "Dashboard") {
+        if (showActiveRideSheet) {
+            showActiveRideSheet = false
         } else {
-            floatingToolbarState.offset = 0f
-        }
+            val nextScreen = when (currentScreen) {
+                "RideDetail" -> previousScreen
+                "ReplayJourney" -> "RideDetail"
+                else -> "Dashboard"
+            }
 
-        currentScreen = nextScreen
+            // Immediate toolbar state adjustment for flicker-free transitions
+            if (nextScreen !in toolbarScreens) {
+                floatingToolbarState.offset = -2000f // Force hide
+            } else {
+                floatingToolbarState.offset = 0f
+            }
+
+            currentScreen = nextScreen
+        }
     }
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var toolbarHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+
+    val historyViewModel: HistoryViewModel = hiltViewModel()
+    var showSortFilterSheet by remember { mutableStateOf(false) }
+
+    val toolbarContent: @Composable RowScope.() -> Unit = {
+        val items = listOf("Dashboard", "History", "Insights", "Settings")
+        val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Outlined.Tune)
+        val selectedIcons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Default.Timeline, Icons.Default.Tune)
+
+        items.forEachIndexed { index, item ->
+            val isSelected = currentScreen == item
+
+            IconButton(
+                onClick = {
+                    if (currentScreen != item) {
+                        currentScreen = item
+                        AppHaptics.performSelection(haptic, hapticsEnabled)
+                        // Reset the toolbar scroll state when switching main tabs.
+                        floatingToolbarState.offset = 0f
+                        floatingToolbarState.contentOffset = 0f
+                    } else {
+                        AppHaptics.performAction(haptic, hapticsEnabled)
+                    }
+                }
+            ) {
+                Box(
+                    modifier = if (isSelected) {
+                        Modifier
+                            .size(50.dp)
+                            .background(
+                                color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.12f),
+                                shape = CircleShape
+                            )
+                    } else Modifier,
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (isSelected) selectedIcons[index] else icons[index],
+                        contentDescription = item,
+                        tint = if (isSelected) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -134,66 +248,48 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
         },
         floatingActionButton = {
             if (currentScreen in toolbarScreens) {
-                HorizontalFloatingToolbar(
-                    expanded = true,
-                    floatingActionButton = {
-                        FloatingToolbarDefaults.VibrantFloatingActionButton(
-                            onClick = {
-                                AppHaptics.performAction(haptic)
-                                previousScreen = currentScreen
-                                currentScreen = "ActiveRide"
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
-                        }
-                    },
-                    modifier = Modifier
-                        .onGloballyPositioned { coordinates ->
-                            toolbarHeightPx = coordinates.size.height
-                        }
-                        .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
-                    scrollBehavior = floatingToolbarScrollBehavior,
-                ) {
-                    val items = listOf("Dashboard", "History", "Insights", "Settings")
-                    val icons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Outlined.Timeline, Icons.Outlined.Tune)
-                    val selectedIcons = listOf(Icons.Outlined.GridView, Icons.Outlined.History, Icons.Default.Timeline, Icons.Default.Tune)
-
-                    items.forEachIndexed { index, item ->
-                        val isSelected = currentScreen == item
-
-                        IconButton(
-                            onClick = {
-                                if (currentScreen != item) {
-                                    currentScreen = item
-                                    AppHaptics.performSelection(haptic)
-                                    // Reset the toolbar scroll state when switching main tabs.
-                                    floatingToolbarState.offset = 0f
-                                    floatingToolbarState.contentOffset = 0f
-                                } else {
-                                    AppHaptics.performAction(haptic)
-                                }
+                if (isRideActive) {
+                    HorizontalFloatingToolbar(
+                        expanded = true,
+                        modifier = Modifier
+                            .onGloballyPositioned { coordinates ->
+                                toolbarHeightPx = coordinates.size.height
                             }
-                        ) {
-                            Box(
-                                modifier = if (isSelected) {
-                                    Modifier
-                                        .size(50.dp)
-                                        .background(
-                                            color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.12f),
-                                            shape = CircleShape
-                                        )
-                                } else Modifier,
-                                contentAlignment = Alignment.Center
+                            .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
+                        scrollBehavior = floatingToolbarScrollBehavior,
+                        content = toolbarContent
+                    )
+                } else {
+                    HorizontalFloatingToolbar(
+                        expanded = true,
+                        floatingActionButton = {
+                            FloatingToolbarDefaults.VibrantFloatingActionButton(
+                                onClick = {
+                                    AppHaptics.performAction(haptic, hapticsEnabled)
+                                    previousScreen = currentScreen
+                                    
+                                    val locationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                                                          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                    
+                                    if (locationGranted) {
+                                        checkLocationAndNavigate()
+                                    } else {
+                                        launcher.launch(permissions)
+                                    }
+                                },
+                                shape = RoundedCornerShape(16.dp),
                             ) {
-                                Icon(
-                                    if (isSelected) selectedIcons[index] else icons[index],
-                                    contentDescription = item,
-                                    tint = if (isSelected) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
-                                )
+                                Icon(Icons.AutoMirrored.Filled.DirectionsBike, contentDescription = "Start Ride")
                             }
-                        }
-                    }
+                        },
+                        modifier = Modifier
+                            .onGloballyPositioned { coordinates ->
+                                toolbarHeightPx = coordinates.size.height
+                            }
+                            .then(floatingToolbarScrollBehavior.floatingScrollBehaviorModifier),
+                        scrollBehavior = floatingToolbarScrollBehavior,
+                        content = toolbarContent
+                    )
                 }
             }
         },
@@ -204,172 +300,296 @@ fun MainApp(onThemeChanged: (String) -> Unit) {
         val measuredBottomPadding = with(density) { toolbarHeightPx.toDp() }
 
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            SharedTransitionLayout {
-                val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney", "ActiveRide")
-                AnimatedContent(
-                    targetState = when (currentScreen) {
-                        "RideDetail" -> "RideDetail"
-                        "ReplayJourney" -> "ReplayJourney"
-                        "ActiveRide" -> "ActiveRide"
-                        else -> currentScreen
-                    },
-                    label = "ScreenTransition",
-                    transitionSpec = {
-                        if ((initialState in listOf("RideDetail", "ReplayJourney", "ActiveRide")) ||
-                            (targetState in listOf("RideDetail", "ReplayJourney", "ActiveRide"))) {
-                            fadeIn(tween(600)) togetherWith fadeOut(tween(600))
+            val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney")
+            
+            AnimatedContent(
+                targetState = when (currentScreen) {
+                    "RideDetail" -> "RideDetail"
+                    "ReplayJourney" -> "ReplayJourney"
+                    else -> currentScreen
+                },
+                label = "ScreenTransition",
+                transitionSpec = {
+                    if ((initialState in listOf("RideDetail", "ReplayJourney")) ||
+                        (targetState in listOf("RideDetail", "ReplayJourney"))) {
+                        fadeIn(tween(600)) togetherWith fadeOut(tween(600))
+                    } else {
+                        val initialIndex = items.indexOf(initialState)
+                        val targetIndex = items.indexOf(targetState)
+                        val direction = if (targetIndex > initialIndex) {
+                            AnimatedContentTransitionScope.SlideDirection.Left
                         } else {
-                            val initialIndex = items.indexOf(initialState)
-                            val targetIndex = items.indexOf(targetState)
-                            val direction = if (targetIndex > initialIndex) {
-                                AnimatedContentTransitionScope.SlideDirection.Left
-                            } else {
-                                AnimatedContentTransitionScope.SlideDirection.Right
-                            }
-
-                            (slideIntoContainer(
-                                towards = direction,
-                                animationSpec = tween(280)
-                            ) + fadeIn(animationSpec = tween(280))) togetherWith
-                                    (slideOutOfContainer(
-                                        towards = direction,
-                                        animationSpec = tween(280)
-                                    ) + fadeOut(animationSpec = tween(280)))
+                            AnimatedContentTransitionScope.SlideDirection.Right
                         }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) { screen ->
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        if (screen !in listOf("RideDetail", "ReplayJourney", "ActiveRide")) {
-                            LargeTopAppBar(
-                                title = {
-                                    Text(
-                                        when (screen) {
-                                            "Dashboard" -> "Dashboard"
-                                            "Insights" -> "Cycling Insights"
-                                            "Settings" -> "Settings & Preferences"
-                                            "History" -> "Ride History"
-                                            else -> screen
-                                        },
-                                        style = MaterialTheme.typography.headlineMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = CycleRideTrackerTheme.colors.largeTitle
-                                        )
-                                    )
-                                },
-                                actions = {
+
+                        (slideIntoContainer(
+                            towards = direction,
+                            animationSpec = tween(280)
+                        ) + fadeIn(animationSpec = tween(280))) togetherWith
+                                (slideOutOfContainer(
+                                    towards = direction,
+                                    animationSpec = tween(280)
+                                ) + fadeOut(animationSpec = tween(280)))
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) { screen ->
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (screen !in listOf("RideDetail", "ReplayJourney")) {
+                        LargeTopAppBar(
+                            title = {
+                                Text(
                                     when (screen) {
-                                        "Dashboard" -> {
-                                            IconButton(onClick = { AppHaptics.performAction(haptic) }) {
-                                                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = CycleRideTrackerTheme.colors.onSurface, modifier = Modifier.size(28.dp))
-                                            }
-                                        }
-                                        "Insights" -> {
-                                            IconButton(onClick = { AppHaptics.performAction(haptic) }) {
-                                                Icon(Icons.Default.Share, contentDescription = "Share", tint = CycleRideTrackerTheme.colors.onSurface)
-                                            }
-                                        }
-                                        "History" -> {
-                                            IconButton(onClick = { AppHaptics.performAction(haptic) }) {
-                                                Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorites", tint = CycleRideTrackerTheme.colors.onSurface)
-                                            }
-                                        }
-                                    }
-                                },
-                                scrollBehavior = topAppBarScrollBehavior,
-                                colors = TopAppBarDefaults.topAppBarColors(
-                                    containerColor = CycleRideTrackerTheme.colors.background,
-                                    scrolledContainerColor = CycleRideTrackerTheme.colors.background,
-                                    titleContentColor = CycleRideTrackerTheme.colors.largeTitle
-                                )
-                            )
-                        }
-
-                        val contentPadding = PaddingValues(
-                            top = 0.dp,
-                            bottom = if (screen in toolbarScreens) {
-                                measuredBottomPadding + 48.dp
-                            } else {
-                                16.dp
-                            },
-                            start = 16.dp,
-                            end = 16.dp
-                        )
-
-                        when (screen) {
-                            "Dashboard" -> DashboardContent(
-                                contentPadding = contentPadding,
-                                onRideClick = { ride ->
-                                    selectedRide = ride
-                                    previousScreen = "Dashboard"
-                                    currentScreen = "RideDetail"
-                                },
-                                onReplayLatest = {
-                                    // Mock selecting the first ride for replay
-                                    selectedRide = RideData(
-                                        title = "Morning Downtown Ride",
-                                        time = "Thu, Aug 27 • 4:45 PM",
-                                        distance = "8.4 km",
-                                        duration = "28:00",
-                                        avgSpeed = "19.8 km/h",
-                                        isFavorite = true
+                                        "Dashboard" -> "Dashboard"
+                                        "Insights" -> "Cycling Insights"
+                                        "Settings" -> "Settings & Preferences"
+                                        "History" -> "Ride History"
+                                        else -> screen
+                                    },
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = CycleRideTrackerTheme.colors.largeTitle
                                     )
-                                    currentScreen = "ReplayJourney"
-                                },
-                                sharedTransitionScope = this@SharedTransitionLayout,
-                                animatedVisibilityScope = this@AnimatedContent
-                            )
-                            "RideDetail" -> selectedRide?.let { ride ->
-                                RideDetailScreen(
-                                    ride = ride,
-                                    onBack = {
-                                        val prev = previousScreen
-                                        currentScreen = prev
-                                    },
-                                    onReplayClick = {
-                                        currentScreen = "ReplayJourney"
-                                    },
-                                    sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = this@AnimatedContent,
-                                    keyPrefix = previousScreen.lowercase()
                                 )
-                            }
-                            "ReplayJourney" -> selectedRide?.let { ride ->
-                                ReplayJourneyScreen(
-                                    ride = ride,
-                                    onBack = {
-                                        currentScreen = "RideDetail"
+                            },
+                            actions = {
+                                when (screen) {
+                                    "Insights" -> {
+                                        IconButton(onClick = { AppHaptics.performAction(haptic, hapticsEnabled) }) {
+                                            Icon(Icons.Default.Share, contentDescription = "Share", tint = CycleRideTrackerTheme.colors.onSurface)
+                                        }
                                     }
-                                )
-                            }
-                            "History" -> HistoryContent(
-                                contentPadding = contentPadding,
-                                onRideClick = { ride ->
-                                    selectedRide = ride
-                                    previousScreen = "History"
-                                    currentScreen = "RideDetail"
-                                },
-                                sharedTransitionScope = this@SharedTransitionLayout,
-                                animatedVisibilityScope = this@AnimatedContent
+                                    "History" -> {
+                                        IconButton(onClick = { 
+                                            showSortFilterSheet = true
+                                            AppHaptics.performAction(haptic, hapticsEnabled) 
+                                        }) {
+                                            Icon(Icons.Default.Tune, contentDescription = "Sort & Filter", tint = CycleRideTrackerTheme.colors.onSurface)
+                                        }
+                                    }
+                                }
+                            },
+                            scrollBehavior = topAppBarScrollBehavior,
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = CycleRideTrackerTheme.colors.background,
+                                scrolledContainerColor = CycleRideTrackerTheme.colors.background,
+                                titleContentColor = CycleRideTrackerTheme.colors.largeTitle
                             )
-                            "Insights" -> InsightsContent(contentPadding)
-                            "Settings" -> SettingsContent(onThemeChanged, contentPadding)
-                            "ActiveRide" -> ActiveRideScreen(
+                        )
+                    }
+
+                    val contentPadding = PaddingValues(
+                        top = 0.dp,
+                        bottom = if (screen in toolbarScreens) {
+                            measuredBottomPadding + 48.dp
+                        } else {
+                            16.dp
+                        },
+                        start = 16.dp,
+                        end = 16.dp
+                    )
+
+                    when (screen) {
+                        "Dashboard" -> DashboardContent(
+                            contentPadding = contentPadding,
+                            onRideClick = { ride ->
+                                selectedRide = ride
+                                previousScreen = "Dashboard"
+                                currentScreen = "RideDetail"
+                            },
+                            onReplayLatest = { ride ->
+                                selectedRide = ride
+                                currentScreen = "ReplayJourney"
+                            },
+                            onViewAllClick = {
+                                currentScreen = "History"
+                            }
+                        )
+                        "RideDetail" -> selectedRide?.let { ride ->
+                            RideDetailScreen(
+                                rideId = ride.id,
                                 onBack = {
-                                    currentScreen = "Dashboard"
+                                    val prev = previousScreen
+                                    currentScreen = prev
                                 },
-                                onFinish = {
-                                    currentScreen = "Dashboard"
+                                onReplayClick = {
+                                    currentScreen = "ReplayJourney"
                                 }
                             )
-                            else -> Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
-                                Text("Coming Soon: $screen", color = CycleRideTrackerTheme.colors.onSurface)
-                            }
+                        }
+                        "ReplayJourney" -> selectedRide?.let { ride ->
+                            ReplayJourneyScreen(
+                                ride = ride,
+                                useMetric = useMetric,
+                                onBack = {
+                                    currentScreen = "RideDetail"
+                                }
+                            )
+                        }
+                        "History" -> HistoryContent(
+                            contentPadding = contentPadding,
+                            onRideClick = { ride ->
+                                selectedRide = ride
+                                previousScreen = "History"
+                                currentScreen = "RideDetail"
+                            },
+                            viewModel = historyViewModel
+                        )
+                        "Insights" -> InsightsContent(contentPadding)
+                        "Settings" -> SettingsContent(contentPadding = contentPadding)
+                        else -> Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
+                            Text("Coming Soon: $screen", color = CycleRideTrackerTheme.colors.onSurface)
                         }
                     }
                 }
             }
+
+            ActiveRideIndicator(
+                viewModel = activeRideViewModel,
+                isVisible = currentScreen !in listOf("Settings"),
+                onClick = {
+                    showActiveRideSheet = true
+                }
+            )
+        }
+    }
+
+    if (showActiveRideSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showActiveRideSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = CycleRideTrackerTheme.colors.background,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            contentWindowInsets = { WindowInsets.statusBars }
+        ) {
+            ActiveRideScreen(
+                onFinish = { showActiveRideSheet = false }
+            )
+        }
+    }
+
+    if (showLocationOffDialog) {
+        AlertDialog(
+            onDismissRequest = { showLocationOffDialog = false },
+            title = { Text("Location Disabled") },
+            text = { Text("To track your ride, please enable device location in your system settings.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLocationOffDialog = false
+                    context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }) {
+                    Text("Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLocationOffDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showSortFilterSheet) {
+        val currentSort by historyViewModel.sortOption.collectAsStateWithLifecycle()
+        val currentOrder by historyViewModel.sortOrder.collectAsStateWithLifecycle()
+        val currentFilter by historyViewModel.filterOption.collectAsStateWithLifecycle()
+
+        ModalBottomSheet(
+            onDismissRequest = { showSortFilterSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = CycleRideTrackerTheme.colors.cardBackground
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth()
+            ) {
+                Text(
+                    "Sort & Filter",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
+                
+                Spacer(Modifier.height(24.dp))
+                
+                Text(
+                    "SORT BY",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.primary
+                )
+                
+                Spacer(Modifier.height(12.dp))
+                
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SortOption.entries.forEach { option ->
+                        FilterChip(
+                            selected = currentSort == option,
+                            onClick = { 
+                                historyViewModel.onSortOptionChange(option)
+                                AppHaptics.performSelection(haptic, hapticsEnabled)
+                            },
+                            label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.height(16.dp))
+                
+                Text(
+                    "ORDER",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.primary
+                )
+                
+                Spacer(Modifier.height(12.dp))
+                
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SortOrder.entries.forEach { order ->
+                        FilterChip(
+                            selected = currentOrder == order,
+                            onClick = { 
+                                historyViewModel.onSortOrderChange(order)
+                                AppHaptics.performSelection(haptic, hapticsEnabled)
+                            },
+                            label = { Text(order.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.height(24.dp))
+                
+                Text(
+                    "FILTER BY DATE",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = CycleRideTrackerTheme.colors.primary
+                )
+                
+                Spacer(Modifier.height(12.dp))
+                
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterOption.entries.forEach { option ->
+                        FilterChip(
+                            selected = currentFilter == option,
+                            onClick = { 
+                                historyViewModel.onFilterOptionChange(option)
+                                AppHaptics.performSelection(haptic, hapticsEnabled)
+                            },
+                            label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.height(48.dp))
+            }
         }
     }
 }
-

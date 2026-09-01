@@ -46,10 +46,20 @@ import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import kotlin.math.roundToInt
 
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.ui.InsightsViewModel
+import com.example.cycleridetracker.ui.InsightsStats
+
 @Composable
-fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
+fun InsightsContent(
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    viewModel: InsightsViewModel = hiltViewModel()
+) {
     val haptic = LocalHapticFeedback.current
-    var selectedRange by remember { mutableStateOf("Week") }
+    val selectedRange by viewModel.selectedRange.collectAsStateWithLifecycle()
+    val stats by viewModel.insightsStats.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -60,24 +70,24 @@ fun InsightsContent(contentPadding: PaddingValues = PaddingValues(16.dp)) {
             TimeRangeSelector(
                 selected = selectedRange,
                 onSelected = {
-                    selectedRange = it
+                    viewModel.selectRange(it)
                     AppHaptics.performSelection(haptic)
                 }
             )
         }
 
         item {
-            GoalProgressCard(selectedRange = selectedRange)
+            GoalProgressCard(selectedRange = selectedRange, stats = stats)
         }
 
         item {
             InsightsSectionTitle(title = "DISTANCE VISUALIZATION")
-            DistanceVisualizationCard(selectedRange = selectedRange)
+            DistanceVisualizationCard(selectedRange = selectedRange, stats = stats)
         }
 
         item {
             InsightsSectionTitle(title = "RIDE PERFORMANCE METRICS")
-            PerformanceMetricsGrid()
+            PerformanceMetricsGrid(stats = stats)
         }
 
         item {
@@ -127,12 +137,10 @@ fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun GoalProgressCard(selectedRange: String) {
-    val targetProgress = when (selectedRange) {
-        "Week" -> 0.78f
-        "Month" -> 0.45f
-        else -> 0.5f
-    }
+fun GoalProgressCard(selectedRange: String, stats: InsightsStats) {
+    val goal = stats.currentGoal
+    val current = stats.totalDistanceKmValue.toFloatOrNull() ?: 0f
+    val targetProgress = (current / goal).coerceIn(0f, 1f)
 
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
@@ -182,12 +190,13 @@ fun GoalProgressCard(selectedRange: String) {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = if (selectedRange == "Week") "39.5 / 50 km" else "39.5 / 500 km",
+                    text = "${stats.totalDistanceKmValue} / ${goal.toInt()} ${stats.distanceUnit}",
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
+                val remaining = (goal - current).coerceAtLeast(0f)
                 Text(
-                    text = if (selectedRange == "Week") "10.5 km remaining to target." else "460.6 km remaining to target.",
+                    text = "%.1f ${stats.distanceUnit} remaining to target.".format(remaining),
                     style = MaterialTheme.typography.bodySmall,
                     color = CycleRideTrackerTheme.colors.onSurfaceVariant
                 )
@@ -197,7 +206,7 @@ fun GoalProgressCard(selectedRange: String) {
 }
 
 @Composable
-fun DistanceVisualizationCard(selectedRange: String) {
+fun DistanceVisualizationCard(selectedRange: String, stats: InsightsStats) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -210,7 +219,7 @@ fun DistanceVisualizationCard(selectedRange: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "39.5 KM TOTAL",
+                    "${stats.totalDistanceKmValue} ${stats.distanceUnit.uppercase()} TOTAL",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
@@ -219,7 +228,7 @@ fun DistanceVisualizationCard(selectedRange: String) {
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        "4 rides",
+                        "${stats.rideCount} rides",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = CycleRideTrackerTheme.colors.primary
@@ -231,9 +240,9 @@ fun DistanceVisualizationCard(selectedRange: String) {
 
             Crossfade(targetState = selectedRange, label = "ChartTransition") { range ->
                 if (range == "Week") {
-                    BarChartMock()
+                    BarChart(stats.chartData)
                 } else {
-                    LineChartMock()
+                    LineChart(stats.chartData)
                 }
             }
         }
@@ -270,8 +279,23 @@ fun rememberMarkerHapticListener(): CartesianMarkerVisibilityListener {
 }
 
 @Composable
-fun BarChartMock() {
-    val data = listOf(0.4f, 0.45f, 0.1f, 0.42f, 0.46f, 0.8f, 0.15f)
+fun BarChart(data: List<Float>) {
+    if (data.isEmpty() || data.all { it == 0f }) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "No data available for this period",
+                style = MaterialTheme.typography.bodyMedium,
+                color = CycleRideTrackerTheme.colors.onSurfaceVariant
+            )
+        }
+        return
+    }
+
     val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     
     val model = remember(data) {
@@ -325,8 +349,23 @@ fun BarChartMock() {
 }
 
 @Composable
-fun LineChartMock() {
-    val data = listOf(0.1f, 0.2f, 0.35f, 0.42f, 0.58f, 0.7f, 0.9f)
+fun LineChart(data: List<Float>) {
+    if (data.isEmpty() || data.all { it == 0f }) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "No data available for this period",
+                style = MaterialTheme.typography.bodyMedium,
+                color = CycleRideTrackerTheme.colors.onSurfaceVariant
+            )
+        }
+        return
+    }
+
     val labels = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
 
     val model = remember(data) {
@@ -379,39 +418,33 @@ fun LineChartMock() {
 }
 
 @Composable
-fun PerformanceMetricsGrid() {
+fun PerformanceMetricsGrid(stats: InsightsStats) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             MetricCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Speed,
                 label = "AVERAGE SPEED",
-                value = "19.2",
-                unit = "km/h"
+                value = stats.avgSpeedValue,
+                unit = stats.speedUnit
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.FlashOn,
                 label = "PEAK MAX SPEED",
-                value = "46.8",
-                unit = "km/h"
+                value = stats.maxSpeedValue,
+                unit = stats.speedUnit
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.Landscape,
-                label = "TOTAL ELEVATION",
-                value = "+382",
-                unit = "m"
-            )
-            MetricCard(
-                modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Timer,
                 label = "RIDING TIME",
-                value = "2h 3m",
+                value = stats.totalDuration,
                 unit = ""
             )
+            Box(modifier = Modifier.weight(1f)) // Empty box to maintain layout grid
         }
     }
 }

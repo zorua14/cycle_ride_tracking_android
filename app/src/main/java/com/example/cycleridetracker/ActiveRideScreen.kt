@@ -1,25 +1,19 @@
 package com.example.cycleridetracker
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,17 +22,32 @@ import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.data.ActiveRideState
+import com.example.cycleridetracker.ui.ActiveRideViewModel
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ActiveRideScreen(
-    onBack: () -> Unit,
-    onFinish: () -> Unit
+    onFinish: () -> Unit,
+    viewModel: ActiveRideViewModel = hiltViewModel()
 ) {
-    var isPaused by remember { mutableStateOf(false) }
+    val uiState by viewModel.activeRideState.collectAsStateWithLifecycle()
+    val trackingState = remember(uiState) { uiState as? ActiveRideState.Tracking }
 
-    Scaffold(
-        topBar = {
+    LaunchedEffect(Unit) {
+        if (uiState is ActiveRideState.Idle) {
+            viewModel.startRide()
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = CycleRideTrackerTheme.colors.background
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -58,266 +67,158 @@ fun ActiveRideScreen(
                         }
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            "Cycling Ride",
+                            "Active Ride",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = CycleRideTrackerTheme.colors.background,
+                    containerColor = Color.Transparent,
                     titleContentColor = CycleRideTrackerTheme.colors.onSurface
-                )
+                ),
+                windowInsets = WindowInsets(0, 0, 0, 0)
             )
-        },
-        containerColor = CycleRideTrackerTheme.colors.background
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                // Map Placeholder with Grid and Path
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(CycleRideTrackerTheme.colors.cardBackground),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val gridColor = Color.White.copy(alpha = 0.05f)
-                        val step = 40.dp.toPx()
-                        
-                        // Draw Grid
-                        for (x in 0..(size.width / step).toInt()) {
-                            drawLine(gridColor, Offset(x * step, 0f), Offset(x * step, size.height), 1.dp.toPx())
-                        }
-                        for (y in 0..(size.height / step).toInt()) {
-                            drawLine(gridColor, Offset(0f, y * step), Offset(size.width, y * step), 1.dp.toPx())
-                        }
 
-                        // Draw Path
-                        val path = Path().apply {
-                            moveTo(size.width * 0.1f, size.height * 0.8f)
-                            lineTo(size.width * 0.1f, size.height * 0.6f)
-                            lineTo(size.width * 0.5f, size.height * 0.5f)
-                            lineTo(size.width * 0.8f, size.height * 0.1f)
-                        }
-                        drawPath(
-                            path = path,
-                            color = Color(0xFF90CAF9), // Light Blue path
-                            style = Stroke(width = 8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                        )
-
-                        // Start point
-                        drawCircle(
-                            color = Color.White,
-                            radius = 6.dp.toPx(),
-                            center = Offset(size.width * 0.1f, size.height * 0.8f)
-                        )
-                        
-                        // Current position point
-                        drawCircle(
-                            color = Color.White,
-                            radius = 12.dp.toPx(),
-                            center = Offset(size.width * 0.8f, size.height * 0.1f)
-                        )
-                        drawCircle(
-                            color = Color(0xFF90CAF9),
-                            radius = 8.dp.toPx(),
-                            center = Offset(size.width * 0.8f, size.height * 0.1f)
-                        )
-                    }
-
-                    // Speed indicator on map
-                    Surface(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .align(Alignment.TopStart),
-                        color = Color.Black.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item {
+                    // Elapsed Time
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(32.dp),
+                        colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Text(
-                                "24.5",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "KM/H",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                // Elapsed Time
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "ELAPSED TIME",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            ),
-                            color = CycleRideTrackerTheme.colors.onSurfaceVariant
-                        )
-                        Text(
-                            "01:05",
-                            style = MaterialTheme.typography.displayMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 56.sp
-                            ),
-                            color = CycleRideTrackerTheme.colors.onSurface
-                        )
-                    }
-                }
-            }
-
-            item {
-                // Metrics Row 1: Distance and Avg Speed (50/50 split)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ActiveTelemetryCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Straighten,
-                        label = "DISTANCE",
-                        value = "0.33",
-                        unit = "km"
-                    )
-                    ActiveTelemetryCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Speed,
-                        label = "AVG SPEED",
-                        value = "18.3",
-                        unit = "km/h"
-                    )
-                }
-            }
-
-            item {
-                // Metrics Row 2: Elevation, Max Speed, and Photos (33/33/33 split)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    ActiveTelemetryCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Landscape,
-                        label = "ELEVATION",
-                        value = "+12",
-                        unit = "m"
-                    )
-                    ActiveTelemetryCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.ElectricBolt,
-                        label = "MAX SPEED",
-                        value = "24.5",
-                        unit = "km/h"
-                    )
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(8.dp))
-                // Controls
-                Box(
-                    modifier = Modifier.fillMaxWidth().animateContentSize()
-                ) {
-                    if (!isPaused) {
-                        Button(
-                            onClick = { isPaused = true },
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp),
-                            shape = RoundedCornerShape(32.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF3F456F), // Muted dark blue
-                                contentColor = Color.White
+                                .padding(vertical = 48.dp, horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "ELAPSED TIME",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 2.sp
+                                ),
+                                color = CycleRideTrackerTheme.colors.onSurfaceVariant
                             )
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Pause, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "PAUSE",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                formatDuration(trackingState?.durationMillis ?: 0L),
+                                style = MaterialTheme.typography.displayMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 72.sp
+                                ),
+                                color = CycleRideTrackerTheme.colors.onSurface
+                            )
                         }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Button(
-                                onClick = { isPaused = false },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(64.dp),
-                                shape = RoundedCornerShape(32.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = CycleRideTrackerTheme.colors.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "RESUME",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                }
-                            }
+                    }
+                }
 
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        ActiveTelemetryCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Straighten,
+                            label = "DISTANCE",
+                            value = String.format(Locale.US, "%.2f", (trackingState?.distanceMeters ?: 0f) / 1000f),
+                            unit = "km"
+                        )
+                        ActiveTelemetryCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Speed,
+                            label = "SPEED",
+                            value = String.format(Locale.US, "%.1f", trackingState?.currentSpeedKmh ?: 0f),
+                            unit = "km/h"
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    // Controls
+                    Box(
+                        modifier = Modifier.fillMaxWidth().animateContentSize()
+                    ) {
+                        val isPaused = trackingState?.isPaused ?: false
+                        
+                        if (!isPaused) {
                             Button(
-                                onClick = onFinish,
+                                onClick = { viewModel.pauseRide() },
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(64.dp),
-                                shape = RoundedCornerShape(32.dp),
+                                    .fillMaxWidth()
+                                    .height(72.dp),
+                                shape = RoundedCornerShape(36.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFEF9A9A), // Muted Red
+                                    containerColor = Color(0xFF3F456F),
                                     contentColor = Color.White
                                 )
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Stop, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
+                                    Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(28.dp))
+                                    Spacer(Modifier.width(12.dp))
                                     Text(
-                                        "FINISH",
+                                        "PAUSE RIDE",
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                     )
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.resumeRide() },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(72.dp),
+                                    shape = RoundedCornerShape(36.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = CycleRideTrackerTheme.colors.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "RESUME",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { 
+                                        viewModel.finishRide()
+                                        onFinish()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(72.dp),
+                                    shape = RoundedCornerShape(36.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFEF9A9A),
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Stop, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "FINISH",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -338,13 +239,13 @@ fun ActiveTelemetryCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = CycleRideTrackerTheme.colors.cardBackground
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(24.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -353,15 +254,14 @@ fun ActiveTelemetryCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Cyan400,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(20.dp)
                 )
 
-
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelSmall.copy(
+                    style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
                     color = CycleRideTrackerTheme.colors.onSurfaceVariant,
@@ -369,13 +269,12 @@ fun ActiveTelemetryCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Row {
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     text = value,
-                    modifier = Modifier.alignByBaseline(),
-                    style = MaterialTheme.typography.titleLarge.copy(
+                    style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
                         platformStyle = PlatformTextStyle(
                             includeFontPadding = false
@@ -385,16 +284,13 @@ fun ActiveTelemetryCard(
                 )
 
                 if (unit.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Text(
                         text = unit,
-                        modifier = Modifier.alignByBaseline(),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            platformStyle = PlatformTextStyle(
-                                includeFontPadding = false
-                            )
+                        modifier = Modifier.padding(bottom = 4.dp),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Bold
                         ),
                         color = CycleRideTrackerTheme.colors.onSurfaceVariant
                     )
@@ -402,15 +298,24 @@ fun ActiveTelemetryCard(
             }
         }
     }
-
-
 }
 
+private fun formatDuration(millis: Long): String {
+    val seconds = (millis / 1000) % 60
+    val minutes = (millis / (1000 * 60)) % 60
+    val hours = (millis / (1000 * 60 * 60))
+    
+    return if (hours > 0) {
+        String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.US, "%02d:%02d", minutes, seconds)
+    }
+}
 
 @Preview(showBackground = true)
 @Composable
 fun ActiveRidePreview() {
     CycleRideTrackerTheme(darkTheme = true) {
-        ActiveRideScreen(onBack = {}, onFinish = {})
+        ActiveRideScreen(onFinish = {})
     }
 }

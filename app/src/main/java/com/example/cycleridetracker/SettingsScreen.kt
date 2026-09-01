@@ -1,5 +1,6 @@
 package com.example.cycleridetracker
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,11 +23,30 @@ import com.example.cycleridetracker.data.ThemePrefs
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.ui.SettingsViewModel
+
 @Composable
 fun SettingsContent(
     onThemeChanged: (String) -> Unit = {},
-    contentPadding: PaddingValues = PaddingValues(16.dp)
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
+    val selectedTheme by viewModel.theme.collectAsStateWithLifecycle()
+    val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val samplingRate by viewModel.samplingRate.collectAsStateWithLifecycle()
+    val persistenceInterval by viewModel.persistenceInterval.collectAsStateWithLifecycle()
+    val weeklyGoal by viewModel.weeklyGoal.collectAsStateWithLifecycle()
+    val monthlyGoal by viewModel.monthlyGoal.collectAsStateWithLifecycle()
+
+    var showSamplingDialog by remember { mutableStateOf(false) }
+    var showPersistenceDialog by remember { mutableStateOf(false) }
+    var showWeeklyGoalDialog by remember { mutableStateOf(false) }
+    var showMonthlyGoalDialog by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
@@ -34,18 +54,87 @@ fun SettingsContent(
     ) {
         item {
             SettingsSectionTitle("THEME & DISPLAY")
-            ThemeDisplayCard(onThemeChanged)
+            ThemeDisplayCard(
+                selectedTheme = selectedTheme,
+                useMetric = useMetric,
+                onThemeSelected = {
+                    viewModel.setTheme(it)
+                    onThemeChanged(it)
+                },
+                onMetricToggled = { viewModel.setUseMetric(it) }
+            )
         }
 
         item {
             SettingsSectionTitle("RECORDING ENGINE")
-            RecordingEngineSection()
+            RecordingEngineSection(
+                samplingRate = samplingRate,
+                persistenceInterval = persistenceInterval,
+                hapticsEnabled = hapticsEnabled,
+                onSamplingRateClick = { showSamplingDialog = true },
+                onPersistenceIntervalClick = { showPersistenceDialog = true },
+                onHapticsToggled = { viewModel.setHapticsEnabled(it) }
+            )
         }
 
         item {
             SettingsSectionTitle("RIDE GOALS")
-            GoalsSection()
+            GoalsSection(
+                weeklyGoal = weeklyGoal,
+                monthlyGoal = monthlyGoal,
+                useMetric = useMetric,
+                onWeeklyGoalClick = { showWeeklyGoalDialog = true },
+                onMonthlyGoalClick = { showMonthlyGoalDialog = true }
+            )
         }
+    }
+
+    if (showSamplingDialog) {
+        SamplingRateDialog(
+            currentRate = samplingRate,
+            onDismiss = { showSamplingDialog = false },
+            onSelect = {
+                viewModel.setSamplingRate(it)
+                showSamplingDialog = false
+            }
+        )
+    }
+
+    if (showPersistenceDialog) {
+        PersistenceIntervalDialog(
+            currentInterval = persistenceInterval,
+            onDismiss = { showPersistenceDialog = false },
+            onSelect = {
+                viewModel.setPersistenceInterval(it)
+                showPersistenceDialog = false
+            }
+        )
+    }
+
+    if (showWeeklyGoalDialog) {
+        GoalEditDialog(
+            title = "Weekly Distance Goal",
+            currentGoal = weeklyGoal,
+            useMetric = useMetric,
+            onDismiss = { showWeeklyGoalDialog = false },
+            onConfirm = {
+                viewModel.setWeeklyGoal(it)
+                showWeeklyGoalDialog = false
+            }
+        )
+    }
+
+    if (showMonthlyGoalDialog) {
+        GoalEditDialog(
+            title = "Monthly Distance Goal",
+            currentGoal = monthlyGoal,
+            useMetric = useMetric,
+            onDismiss = { showMonthlyGoalDialog = false },
+            onConfirm = {
+                viewModel.setMonthlyGoal(it)
+                showMonthlyGoalDialog = false
+            }
+        )
     }
 }
 
@@ -63,11 +152,13 @@ fun SettingsSectionTitle(title: String) {
 }
 
 @Composable
-fun ThemeDisplayCard(onThemeChanged: (String) -> Unit) {
-    val context = LocalContext.current
+fun ThemeDisplayCard(
+    selectedTheme: String,
+    useMetric: Boolean,
+    onThemeSelected: (String) -> Unit,
+    onMetricToggled: (Boolean) -> Unit
+) {
     val haptic = LocalHapticFeedback.current
-    var selectedTheme by remember { mutableStateOf(ThemePrefs.getTheme(context)) }
-    var metricUnits by remember { mutableStateOf(value = true) }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Card(
@@ -104,9 +195,7 @@ fun ThemeDisplayCard(onThemeChanged: (String) -> Unit) {
                 ConnectedThemeSelector(
                     selected = selectedTheme
                 ) {
-                    selectedTheme = it
-                    ThemePrefs.setTheme(context, it)
-                    onThemeChanged(it)
+                    onThemeSelected(it)
                     AppHaptics.performSelection(haptic)
                 }
             }
@@ -133,15 +222,15 @@ fun ThemeDisplayCard(onThemeChanged: (String) -> Unit) {
                         color = CycleRideTrackerTheme.colors.onSurface
                     )
                     Text(
-                        "Metric (Kilometers)",
+                        if (useMetric) "Metric (Kilometers)" else "Imperial (Miles)",
                         style = MaterialTheme.typography.bodySmall,
                         color = CycleRideTrackerTheme.colors.onSurfaceVariant
                     )
                 }
                 Switch(
-                    checked = metricUnits,
+                    checked = useMetric,
                     onCheckedChange = {
-                        metricUnits = it
+                        onMetricToggled(it)
                         AppHaptics.performAction(haptic)
                     },
                     colors = SwitchDefaults.colors(
@@ -193,13 +282,20 @@ fun ConnectedThemeSelector(selected: String, onSelected: (String) -> Unit) {
 }
 
 @Composable
-fun RecordingEngineSection() {
+fun RecordingEngineSection(
+    samplingRate: Long,
+    persistenceInterval: Long,
+    hapticsEnabled: Boolean,
+    onSamplingRateClick: () -> Unit,
+    onPersistenceIntervalClick: () -> Unit,
+    onHapticsToggled: (Boolean) -> Unit
+) {
     val haptic = LocalHapticFeedback.current
-    var hapticFeedback by remember { mutableStateOf(true) }
 
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth(),
+            onClick = onSamplingRateClick,
             colors = CardDefaults.cardColors(
                 containerColor = CycleRideTrackerTheme.colors.cardBackground
             ),
@@ -208,7 +304,12 @@ fun RecordingEngineSection() {
             ListItem(
                 supportingContent = {
                     Text(
-                        "High Accuracy (1s)",
+                        when (samplingRate) {
+                            1000L -> "High Accuracy (1s)"
+                            2000L -> "Balanced (2s)"
+                            5000L -> "Battery Saver (5s)"
+                            else -> "${samplingRate / 1000}s"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = CycleRideTrackerTheme.colors.onSurfaceVariant
                     )
@@ -232,6 +333,40 @@ fun RecordingEngineSection() {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
+            onClick = onPersistenceIntervalClick,
+            colors = CardDefaults.cardColors(
+                containerColor = CycleRideTrackerTheme.colors.cardBackground
+            ),
+            shape = RoundedCornerShape(4.dp)
+        ) {
+            ListItem(
+                supportingContent = {
+                    val minutes = persistenceInterval / 60000
+                    Text(
+                        if (minutes < 1) "Every ${persistenceInterval / 1000} seconds" else "Every $minutes minutes",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
+                    )
+                },
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = "Select",
+                        tint = CycleRideTrackerTheme.colors.onSurfaceVariant
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            ) {
+                Text(
+                    "Database Sync Frequency",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = CycleRideTrackerTheme.colors.onSurface
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = CycleRideTrackerTheme.colors.cardBackground
             ),
@@ -247,9 +382,9 @@ fun RecordingEngineSection() {
                 },
                 trailingContent = {
                     Switch(
-                        checked = hapticFeedback,
+                        checked = hapticsEnabled,
                         onCheckedChange = {
-                            hapticFeedback = it
+                            onHapticsToggled(it)
                             AppHaptics.performAction(haptic)
                         },
                         colors = SwitchDefaults.colors(
@@ -271,10 +406,18 @@ fun RecordingEngineSection() {
 }
 
 @Composable
-fun GoalsSection() {
+fun GoalsSection(
+    weeklyGoal: Float,
+    monthlyGoal: Float,
+    useMetric: Boolean,
+    onWeeklyGoalClick: () -> Unit,
+    onMonthlyGoalClick: () -> Unit
+) {
+    val unit = if (useMetric) "km" else "mi"
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth(),
+            onClick = onWeeklyGoalClick,
             colors = CardDefaults.cardColors(
                 containerColor = CycleRideTrackerTheme.colors.cardBackground
             ),
@@ -283,12 +426,13 @@ fun GoalsSection() {
             GoalListItem(
                 icon = Icons.Outlined.Grid3x3,
                 title = "Weekly Distance Goal",
-                subtitle = "50 km per week"
+                subtitle = "${weeklyGoal.toInt()} $unit per week"
             )
         }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
+            onClick = onMonthlyGoalClick,
             colors = CardDefaults.cardColors(
                 containerColor = CycleRideTrackerTheme.colors.cardBackground
             ),
@@ -297,7 +441,7 @@ fun GoalsSection() {
             GoalListItem(
                 icon = Icons.Outlined.CalendarMonth,
                 title = "Monthly Distance Goal",
-                subtitle = "180 km per month"
+                subtitle = "${monthlyGoal.toInt()} $unit per month"
             )
         }
     }
@@ -305,7 +449,6 @@ fun GoalsSection() {
 
 @Composable
 fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
-    val haptic = LocalHapticFeedback.current
     ListItem(
         supportingContent = {
             Text(
@@ -331,14 +474,12 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
             }
         },
         trailingContent = {
-            IconButton(onClick = { AppHaptics.performSelection(haptic) }) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit",
-                    modifier = Modifier.size(20.dp),
-                    tint = CycleRideTrackerTheme.colors.onSurfaceVariant
-                )
-            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = "Edit",
+                modifier = Modifier.size(20.dp),
+                tint = CycleRideTrackerTheme.colors.onSurfaceVariant
+            )
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     ) {
@@ -348,6 +489,139 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
             color = CycleRideTrackerTheme.colors.onSurface
         )
     }
+}
+
+@Composable
+fun SamplingRateDialog(
+    currentRate: Long,
+    onDismiss: () -> Unit,
+    onSelect: (Long) -> Unit
+) {
+    val options = listOf(
+        1000L to "High Accuracy (1s)",
+        2000L to "Balanced (2s)",
+        5000L to "Battery Saver (5s)"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("GPS Sampling Rate") },
+        text = {
+            Column {
+                options.forEach { (rate, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(rate) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = rate == currentRate,
+                            onClick = { onSelect(rate) }
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun PersistenceIntervalDialog(
+    currentInterval: Long,
+    onDismiss: () -> Unit,
+    onSelect: (Long) -> Unit
+) {
+    val options = listOf(
+        60000L to "Every 1 minute",
+        300000L to "Every 5 minutes",
+        600000L to "Every 10 minutes",
+        900000L to "Every 15 minutes",
+        1800000L to "Every 30 minutes"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Database Sync Frequency") },
+        text = {
+            Column {
+                Text(
+                    "Choose the time interval for saving tracking data to the database. Frequent saves protect data; longer intervals save battery.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                options.forEach { (interval, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(interval) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = interval == currentInterval,
+                            onClick = { onSelect(interval) }
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun GoalEditDialog(
+    title: String,
+    currentGoal: Float,
+    useMetric: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Float) -> Unit
+) {
+    var textValue by remember { mutableStateOf(currentGoal.toInt().toString()) }
+    val unit = if (useMetric) "km" else "mi"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text("Set your target distance ($unit)", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) textValue = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    suffix = { Text(unit) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    textValue.toFloatOrNull()?.let { onConfirm(it) }
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Preview(showBackground = true)

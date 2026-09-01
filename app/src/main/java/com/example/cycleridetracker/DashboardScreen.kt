@@ -27,32 +27,73 @@ import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.example.cycleridetracker.ui.theme.StreakPurple
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.cycleridetracker.data.Ride
+import com.example.cycleridetracker.ui.DashboardViewModel
+import com.example.cycleridetracker.ui.DashboardStats
+
 @Composable
 fun DashboardContent(
     contentPadding: PaddingValues = PaddingValues(16.dp),
-    onRideClick: (RideData) -> Unit = {},
-    onReplayLatest: () -> Unit = {},
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    onRideClick: (Ride) -> Unit = {},
+    onReplayLatest: (Ride) -> Unit = {},
+    onViewAllClick: () -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel()
 ) {
+    val recentRides by viewModel.recentRides.collectAsStateWithLifecycle()
+    val stats by viewModel.weeklyStats.collectAsStateWithLifecycle()
+    val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
+    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item {
-            WeeklyProgressSection()
+            WeeklyProgressSection(stats)
         }
 
         item {
             RecentRidesSection(
-                haptic = LocalHapticFeedback.current,
+                rides = recentRides.take(4),
+                useMetric = useMetric,
+                hapticsEnabled = hapticsEnabled,
+                haptic = haptic,
                 onRideClick = onRideClick,
-                onReplayLatest = onReplayLatest,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope
+                onReplayLatest = {
+                    recentRides.firstOrNull()?.let { onReplayLatest(it) }
+                }
             )
+        }
+
+        if (recentRides.isNotEmpty()) {
+            item {
+                Button(
+                    onClick = {
+                        AppHaptics.performAction(haptic, hapticsEnabled)
+                        onViewAllClick()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.1f),
+                        contentColor = CycleRideTrackerTheme.colors.primary
+                    )
+                ) {
+                    Text(
+                        "View All Rides",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }
@@ -60,7 +101,7 @@ fun DashboardContent(
 // DashboardHeader is now handled by MainActivity's TopAppBar
 
 @Composable
-fun WeeklyProgressSection() {
+fun WeeklyProgressSection(stats: DashboardStats) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -76,26 +117,28 @@ fun WeeklyProgressSection() {
                 color = CycleRideTrackerTheme.colors.primary
             )
 
-            Surface(
-                color = StreakPurple,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (stats.streakDays > 0) {
+                Surface(
+                    color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(
-                        Icons.Default.Whatshot,
-                        contentDescription = null,
-                        tint = Color(0xFFD0BCFF),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "4 Day Streak",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFFD0BCFF)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Whatshot,
+                            contentDescription = null,
+                            tint = CycleRideTrackerTheme.colors.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "${stats.streakDays} Day Streak",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CycleRideTrackerTheme.colors.primary
+                        )
+                    }
                 }
             }
         }
@@ -105,21 +148,21 @@ fun WeeklyProgressSection() {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Route,
                 label = "DISTANCE",
-                value = "42.8",
-                unit = "km"
+                value = stats.distanceValue,
+                unit = stats.distanceUnit
             )
             ProgressMetricCard(
                 modifier = Modifier.weight(0.8f),
                 icon = Icons.AutoMirrored.Filled.DirectionsBike,
                 label = "RIDES",
-                value = "6",
+                value = stats.ridesCount,
                 unit = "rides"
             )
             ProgressMetricCard(
                 modifier = Modifier.weight(0.9f),
                 icon = Icons.Default.Timer,
                 label = "TIME",
-                value = "128",
+                value = stats.timeMinutes,
                 unit = "min"
             )
         }
@@ -170,14 +213,14 @@ fun ProgressMetricCard(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun RecentRidesSection(
+    rides: List<Ride>,
+    useMetric: Boolean,
+    hapticsEnabled: Boolean,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
-    onRideClick: (RideData) -> Unit,
-    onReplayLatest: () -> Unit,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope
+    onRideClick: (Ride) -> Unit,
+    onReplayLatest: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(
@@ -215,40 +258,23 @@ fun RecentRidesSection(
             }
         }
 
-        val rides = listOf(
-            RideData("Morning Downtown Ride", "Thu, Aug 27 • 4:45 PM", "8.4 km", "28:00", "19.8 km/h", true),
-            RideData("Sunset Riverbank Return", "Wed, Aug 26 • 5:45 PM", "9.2 km", "30:20", "20.4 km/h", false),
-            RideData("Weekend Twin Peaks Loop", "Mon, Aug 24 • 2:45 PM", "18.6 km", "53:20", "22.5 km/h", true),
-            RideData("Neighborhood Errand Run", "Sat, Aug 22 • 1:45 PM", "3.2 km", "11:20", "16.8 km/h", false)
-        )
-
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             rides.forEach { ride ->
                 RecentRideCard(
-                    ride = ride,
+                    ride = ride.toRideData(useMetric),
                     haptic = haptic,
-                    keyPrefix = "dashboard",
-                    onClick = { onRideClick(ride) },
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope
+                    hapticsEnabled = hapticsEnabled,
+                    onClick = { onRideClick(ride) }
                 )
             }
         }
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Preview(showBackground = true)
 @Composable
 fun DashboardPreview() {
     CycleRideTrackerTheme(darkTheme = true) {
-        SharedTransitionLayout {
-            AnimatedVisibility(visible = true) {
-                DashboardContent(
-                    sharedTransitionScope = this@SharedTransitionLayout,
-                    animatedVisibilityScope = this@AnimatedVisibility
-                )
-            }
-        }
+        DashboardContent()
     }
 }

@@ -4,11 +4,15 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 object AppHaptics {
-    fun performAction(haptic: HapticFeedback) {
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+    fun performAction(haptic: HapticFeedback, enabled: Boolean = true) {
+        if (enabled) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
     }
 
-    fun performSelection(haptic: HapticFeedback) {
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    fun performSelection(haptic: HapticFeedback, enabled: Boolean = true) {
+        if (enabled) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
     }
 }

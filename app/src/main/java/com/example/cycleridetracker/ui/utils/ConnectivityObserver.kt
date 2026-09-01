@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -31,21 +32,25 @@ class NetworkConnectivityObserver(
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     super.onAvailable(network)
+                    Log.d("ConnectivityObserver", "Network Status: Available")
                     launch { send(ConnectivityObserver.Status.Available) }
                 }
 
                 override fun onLosing(network: Network, maxMsToLive: Int) {
                     super.onLosing(network, maxMsToLive)
+                    Log.d("ConnectivityObserver", "Network Status: Losing")
                     launch { send(ConnectivityObserver.Status.Losing) }
                 }
 
                 override fun onLost(network: Network) {
                     super.onLost(network)
+                    Log.d("ConnectivityObserver", "Network Status: Lost")
                     launch { send(ConnectivityObserver.Status.Lost) }
                 }
 
                 override fun onUnavailable() {
                     super.onUnavailable()
+                    Log.d("ConnectivityObserver", "Network Status: Unavailable")
                     launch { send(ConnectivityObserver.Status.Unavailable) }
                 }
             }
@@ -58,11 +63,9 @@ class NetworkConnectivityObserver(
                     ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             } ?: false
             
-            if (isConnected) {
-                send(ConnectivityObserver.Status.Available)
-            } else {
-                send(ConnectivityObserver.Status.Unavailable)
-            }
+            val initialStatus = if (isConnected) ConnectivityObserver.Status.Available else ConnectivityObserver.Status.Unavailable
+            Log.d("ConnectivityObserver", "Initial Network Status: $initialStatus")
+            send(initialStatus)
 
             awaitClose {
                 connectivityManager.unregisterNetworkCallback(callback)

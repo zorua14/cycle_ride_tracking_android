@@ -1,7 +1,8 @@
 package com.example.cycleridetracker
 
-import androidx.compose.animation.*
 import android.util.Log
+import android.view.MotionEvent
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -82,6 +83,10 @@ fun RideDetailScreen(
         initial = ConnectivityObserver.Status.Available
     )
 
+    LaunchedEffect(networkStatus) {
+        Log.d("RideDetailScreen", "Network status changed: $networkStatus")
+    }
+
     if (ride == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -92,6 +97,8 @@ fun RideDetailScreen(
     val currentRide = ride!!
     val rideData = currentRide.toRideData(useMetric)
     val photoMarkers = remember { mutableStateMapOf<String, android.graphics.Bitmap>() }
+    
+    var mapInitialized by remember(rideId) { mutableStateOf(false) }
     
     var fullScreenPhotoUri by remember { mutableStateOf<String?>(null) }
     var showDeleteRideDialog by remember { mutableStateOf(false) }
@@ -232,58 +239,75 @@ fun RideDetailScreen(
                             }
                         }
 
-                        AndroidView(
-                            factory = { context ->
-                                de.afarber.openmapview.OpenMapView(context)
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                            update = { mapView ->
-                                if (currentRide.pathPoints.isNotEmpty()) {
-                                    val points = currentRide.pathPoints.map { 
-                                        LatLng(it.latitude, it.longitude)
-                                    }
-                                    
-                                    mapView.clear()
-                                    
-                                    val polyline = Polyline(
-                                        points = points,
-                                        strokeColor = androidx.compose.ui.graphics.Color.Cyan,
-                                        strokeWidth = 12f
-                                    )
-                                    mapView.addPolyline(polyline)
-                                    
-                                    // Photo markers
-                                    Log.d("RideDetailScreen", "Updating map markers. Photos in ride: ${currentRide.photos.size}, Bitmaps ready: ${photoMarkers.size}")
-                                    currentRide.photos.forEach { photo ->
-                                        if (photo.latitude != null && photo.longitude != null) {
-                                            val customBitmap = photoMarkers[photo.uri]
-                                            val markerIcon = if (customBitmap != null) {
-                                                BitmapDescriptor.BitmapMarker(customBitmap)
-                                            } else {
-                                                Log.d("RideDetailScreen", "No custom bitmap yet for ${photo.uri}, using default")
-                                                null // Default marker
+                        if (networkStatus == ConnectivityObserver.Status.Available) {
+                            AndroidView(
+                                factory = { context ->
+                                    de.afarber.openmapview.OpenMapView(context).apply {
+                                        // Request parent (LazyColumn) to not intercept touch events 
+                                        // when the user is interacting with the map.
+                                        setOnTouchListener { v, event ->
+                                            when (event.action) {
+                                                MotionEvent.ACTION_DOWN -> {
+                                                    v.parent.requestDisallowInterceptTouchEvent(true)
+                                                }
+                                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                                    v.parent.requestDisallowInterceptTouchEvent(false)
+                                                }
                                             }
-
-                                            Log.d("RideDetailScreen", "Adding marker to map at ${photo.latitude}, ${photo.longitude}")
-                                            mapView.addMarker(Marker(
-                                                position = LatLng(photo.latitude, photo.longitude),
-                                                title = "Photo",
-                                                icon = markerIcon,
-                                                anchor = 0.5f to 1.0f
-                                            ))
+                                            v.onTouchEvent(event)
                                         }
                                     }
-                                    
-                                    // Zoom to show path properly
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                                update = { mapView ->
                                     if (currentRide.pathPoints.isNotEmpty()) {
-                                        val avgLat = currentRide.pathPoints.map { it.latitude }.average()
-                                        val avgLng = currentRide.pathPoints.map { it.longitude }.average()
-                                        mapView.setCenter(LatLng(avgLat, avgLng))
-                                        mapView.setZoom(13f)
+                                        val points = currentRide.pathPoints.map { 
+                                            LatLng(it.latitude, it.longitude)
+                                        }
+                                        
+                                        mapView.clear()
+                                        
+                                        val polyline = Polyline(
+                                            points = points,
+                                            strokeColor = androidx.compose.ui.graphics.Color.Cyan,
+                                            strokeWidth = 12f
+                                        )
+                                        mapView.addPolyline(polyline)
+                                        
+                                        // Photo markers
+                                        Log.d("RideDetailScreen", "Updating map markers. Photos in ride: ${currentRide.photos.size}, Bitmaps ready: ${photoMarkers.size}")
+                                        currentRide.photos.forEach { photo ->
+                                            if (photo.latitude != null && photo.longitude != null) {
+                                                val customBitmap = photoMarkers[photo.uri]
+                                                val markerIcon = if (customBitmap != null) {
+                                                    BitmapDescriptor.BitmapMarker(customBitmap)
+                                                } else {
+                                                    Log.d("RideDetailScreen", "No custom bitmap yet for ${photo.uri}, using default")
+                                                    null // Default marker
+                                                }
+
+                                                Log.d("RideDetailScreen", "Adding marker to map at ${photo.latitude}, ${photo.longitude}")
+                                                mapView.addMarker(Marker(
+                                                    position = LatLng(photo.latitude, photo.longitude),
+                                                    title = "Photo",
+                                                    icon = markerIcon,
+                                                    anchor = 0.5f to 1.0f
+                                                ))
+                                            }
+                                        }
+                                        
+                                        // Zoom and center only once to allow free dragging thereafter
+                                        if (!mapInitialized && currentRide.pathPoints.isNotEmpty()) {
+                                            val avgLat = currentRide.pathPoints.map { it.latitude }.average()
+                                            val avgLng = currentRide.pathPoints.map { it.longitude }.average()
+                                            mapView.setCenter(LatLng(avgLat, avgLng))
+                                            mapView.setZoom(14f)
+                                            mapInitialized = true
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
 
@@ -296,15 +320,22 @@ fun RideDetailScreen(
                 }
 
                 item {
+                    val isOffline = networkStatus != ConnectivityObserver.Status.Available
                     Button(
-                        onClick = onReplayClick,
+                        onClick = {
+                            if (!isOffline) {
+                                onReplayClick()
+                            } else {
+                                android.widget.Toast.makeText(context, "Internet connection required for Replay Journey", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
-                            contentColor = Cyan400
+                            contentColor = if (isOffline) CycleRideTrackerTheme.colors.onSurfaceVariant else Cyan400
                         ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Navy700),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isOffline) CycleRideTrackerTheme.colors.outline else Navy700),
                         contentPadding = PaddingValues(16.dp)
                     ) {
                         Row(
@@ -314,28 +345,28 @@ fun RideDetailScreen(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = Cyan400.copy(alpha = 0.1f),
+                                color = (if (isOffline) CycleRideTrackerTheme.colors.onSurfaceVariant else Cyan400).copy(alpha = 0.1f),
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.PlayArrow,
+                                        if (isOffline) Icons.Default.CloudOff else Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        tint = Cyan400
+                                        tint = if (isOffline) CycleRideTrackerTheme.colors.onSurfaceVariant else Cyan400
                                     )
                                 }
                             }
                             Spacer(Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "REPLAY INTERACTIVE JOURNEY 🎬",
+                                    if (isOffline) "OFFLINE - REPLAY UNAVAILABLE" else "REPLAY INTERACTIVE JOURNEY 🎬",
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontWeight = FontWeight.Bold,
                                         letterSpacing = 0.5.sp
                                     )
                                 )
                                 Text(
-                                    "Scrub through every turn and view photo waypoints.",
+                                    if (isOffline) "Please connect to the internet to load map tiles." else "Scrub through every turn and view photo waypoints.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = CycleRideTrackerTheme.colors.onSurfaceVariant
                                 )

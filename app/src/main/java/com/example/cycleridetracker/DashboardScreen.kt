@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.cycleridetracker.data.Ride
 import com.example.cycleridetracker.ui.DashboardViewModel
 import com.example.cycleridetracker.ui.DashboardStats
+import com.example.cycleridetracker.ui.utils.ConnectivityObserver
 
 @Composable
 fun DashboardContent(
@@ -40,6 +41,7 @@ fun DashboardContent(
     onRideClick: (Ride) -> Unit = {},
     onReplayLatest: (Ride) -> Unit = {},
     onViewAllClick: () -> Unit = {},
+    networkStatus: ConnectivityObserver.Status = ConnectivityObserver.Status.Available,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val recentRides by viewModel.recentRides.collectAsStateWithLifecycle()
@@ -66,7 +68,8 @@ fun DashboardContent(
                 onRideClick = onRideClick,
                 onReplayLatest = {
                     recentRides.firstOrNull()?.let { onReplayLatest(it) }
-                }
+                },
+                isOffline = networkStatus != ConnectivityObserver.Status.Available
             )
         }
 
@@ -220,7 +223,8 @@ fun RecentRidesSection(
     hapticsEnabled: Boolean,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     onRideClick: (Ride) -> Unit,
-    onReplayLatest: () -> Unit
+    onReplayLatest: () -> Unit,
+    isOffline: Boolean = false
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(
@@ -237,22 +241,25 @@ fun RecentRidesSection(
                 color = CycleRideTrackerTheme.colors.primary
             )
 
-            TextButton(onClick = { 
-                onReplayLatest()
-                AppHaptics.performAction(haptic) 
-            }) {
+            TextButton(
+                onClick = { 
+                    onReplayLatest()
+                    AppHaptics.performAction(haptic) 
+                },
+                enabled = !isOffline
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.PlayCircleOutline,
+                        if (isOffline) Icons.Default.CloudOff else Icons.Default.PlayCircleOutline,
                         contentDescription = null,
-                        tint = CycleRideTrackerTheme.colors.primary,
+                        tint = if (isOffline) CycleRideTrackerTheme.colors.onSurfaceVariant else CycleRideTrackerTheme.colors.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "Replay Latest",
+                        if (isOffline) "Offline" else "Replay Latest",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = CycleRideTrackerTheme.colors.onSurface
+                        color = if (isOffline) CycleRideTrackerTheme.colors.onSurfaceVariant else CycleRideTrackerTheme.colors.onSurface
                     )
                 }
             }

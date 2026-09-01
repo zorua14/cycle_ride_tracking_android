@@ -1,5 +1,7 @@
 package com.example.cycleridetracker
 
+import android.util.Log
+import android.view.MotionEvent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,6 +61,16 @@ fun ReplayJourneyScreen(
     val networkStatus by connectivityObserver.observe().collectAsState(
         initial = ConnectivityObserver.Status.Available
     )
+
+    var showOfflineAlert by remember { mutableStateOf(false) }
+
+    LaunchedEffect(networkStatus) {
+        Log.d("ReplayJourneyScreen", "Network status changed: $networkStatus")
+        if (networkStatus != ConnectivityObserver.Status.Available) {
+            showOfflineAlert = true
+            isPlaying = false
+        }
+    }
     
     val pathPoints = remember(ride.pathPoints) { 
         ride.pathPoints.map { LatLng(it.latitude, it.longitude) } 
@@ -198,66 +210,82 @@ fun ReplayJourneyScreen(
                     }
                 }
                 
-                AndroidView(
-                    factory = { context ->
-                        de.afarber.openmapview.OpenMapView(context)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                            update = { mapView ->
-                                if (pathPoints.isNotEmpty()) {
-                                    mapView.clear()
-                                    
-                                    val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
-                                    val isComplete = currentFrame >= totalFrames - 1
-                                    
-                                    // PROGRESSIVE PATH: Draw only up to current frame to "cover" the traveled path
-                                    val visiblePoints = pathPoints.take(pointIndex + 1)
-                                    if (visiblePoints.size >= 2) {
-                                        val polyline = Polyline(
-                                            points = visiblePoints,
-                                            strokeColor = Color.Cyan,
-                                            strokeWidth = 10f
-                                        )
-                                        mapView.addPolyline(polyline)
-                                    }
-
-                                    // RIDER MARKER
-                                    val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
-                                    mapView.addMarker(Marker(
-                                        position = currentPoint,
-                                        title = "Rider",
-                                        icon = BitmapDescriptor.BitmapMarker(bikeBitmap),
-                                        anchor = 0.5f to 0.5f
-                                    ))
-
-                                    // CAMERA HANDLING:
-                                    // 1. Zoom out only when complete (once)
-                                    // 2. Set initial zoom/position once
-                                    // 3. Follow rider during playback WITHOUT forcing zoom level
-                                    if (isComplete) {
-                                        if (!endSnapped) {
-                                            val avgLat = pathPoints.map { it.latitude }.average()
-                                            val avgLng = pathPoints.map { it.longitude }.average()
-                                            mapView.setCenter(LatLng(avgLat, avgLng))
-                                            mapView.setZoom(14f)
-                                            endSnapped = true
+                if (networkStatus == ConnectivityObserver.Status.Available) {
+                    AndroidView(
+                        factory = { context ->
+                            de.afarber.openmapview.OpenMapView(context).apply {
+                                setOnTouchListener { v, event ->
+                                    // Panning might already work, but we want to ensure it's not intercepted if this was inside a scrollable
+                                    // In ReplayJourneyScreen, it IS inside a Column with verticalScroll.
+                                    when (event.action) {
+                                        MotionEvent.ACTION_DOWN -> {
+                                            v.parent.requestDisallowInterceptTouchEvent(true)
                                         }
-                                    } else {
-                                        if (!mapInitialized) {
-                                            // Initial Position & Zoom
-                                            mapView.setCenter(pathPoints.first())
-                                            mapView.setZoom(16f)
-                                            mapInitialized = true
-                                        } else if (isPlaying) {
-                                            // Follow the current progress point closely, but don't force zoom
-                                            val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
-                                            mapView.setCenter(currentPoint)
+                                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                            v.parent.requestDisallowInterceptTouchEvent(false)
                                         }
-                                        endSnapped = false
                                     }
+                                    v.onTouchEvent(event)
                                 }
                             }
-                )
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        update = { mapView ->
+                            if (pathPoints.isNotEmpty()) {
+                                mapView.clear()
+                                
+                                val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
+                                val isComplete = currentFrame >= totalFrames - 1
+                                
+                                // PROGRESSIVE PATH: Draw only up to current frame to "cover" the traveled path
+                                val visiblePoints = pathPoints.take(pointIndex + 1)
+                                if (visiblePoints.size >= 2) {
+                                    val polyline = Polyline(
+                                        points = visiblePoints,
+                                        strokeColor = Color.Cyan,
+                                        strokeWidth = 10f
+                                    )
+                                    mapView.addPolyline(polyline)
+                                }
+
+                                // RIDER MARKER
+                                val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
+                                mapView.addMarker(Marker(
+                                    position = currentPoint,
+                                    title = "Rider",
+                                    icon = BitmapDescriptor.BitmapMarker(bikeBitmap),
+                                    anchor = 0.5f to 0.5f
+                                ))
+
+                                // CAMERA HANDLING:
+                                // 1. Zoom out only when complete (once)
+                                // 2. Set initial zoom/position once
+                                // 3. Follow rider during playback WITHOUT forcing zoom level
+                                if (isComplete) {
+                                    if (!endSnapped) {
+                                        val avgLat = pathPoints.map { it.latitude }.average()
+                                        val avgLng = pathPoints.map { it.longitude }.average()
+                                        mapView.setCenter(LatLng(avgLat, avgLng))
+                                        mapView.setZoom(14f)
+                                        endSnapped = true
+                                    }
+                                } else {
+                                    if (!mapInitialized) {
+                                        // Initial Position & Zoom
+                                        mapView.setCenter(pathPoints.first())
+                                        mapView.setZoom(16f)
+                                        mapInitialized = true
+                                    } else if (isPlaying) {
+                                        // Follow the current progress point closely, but don't force zoom
+                                        val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
+                                        mapView.setCenter(currentPoint)
+                                    }
+                                    endSnapped = false
+                                }
+                            }
+                        }
+                    )
+                }
                 
                 // Photo Waypoint Overlay (Proximity check: 20 meters)
                 val currentPoint = if (pathPoints.isNotEmpty()) {

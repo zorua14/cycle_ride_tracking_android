@@ -67,6 +67,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.location.LocationManager
 import android.provider.Settings
 import android.content.Context
+import android.widget.Toast
+import com.example.cycleridetracker.ui.utils.ConnectivityObserver
+import com.example.cycleridetracker.ui.utils.NetworkConnectivityObserver
 import kotlinx.coroutines.flow.map
 
 @AndroidEntryPoint
@@ -110,6 +113,11 @@ fun MainApp(
     val activeRideViewModel: ActiveRideViewModel = hiltViewModel()
     val activeState by activeRideViewModel.activeRideState.collectAsStateWithLifecycle()
     val isRideActive = activeState is ActiveRideState.Tracking
+
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val networkStatus by connectivityObserver.observe().collectAsState(
+        initial = ConnectivityObserver.Status.Available
+    )
 
     // Auto-resume service if ride is active in repository (recovered from DB)
     LaunchedEffect(isRideActive) {
@@ -398,12 +406,17 @@ fun MainApp(
                                 currentScreen = "RideDetail"
                             },
                             onReplayLatest = { ride ->
-                                selectedRide = ride
-                                currentScreen = "ReplayJourney"
+                                if (networkStatus == ConnectivityObserver.Status.Available) {
+                                    selectedRide = ride
+                                    currentScreen = "ReplayJourney"
+                                } else {
+                                    Toast.makeText(context, "Internet connection required for Replay Journey", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             onViewAllClick = {
                                 currentScreen = "History"
-                            }
+                            },
+                            networkStatus = networkStatus
                         )
                         "RideDetail" -> selectedRide?.let { ride ->
                             RideDetailScreen(
@@ -413,7 +426,11 @@ fun MainApp(
                                     currentScreen = prev
                                 },
                                 onReplayClick = {
-                                    currentScreen = "ReplayJourney"
+                                    if (networkStatus == ConnectivityObserver.Status.Available) {
+                                        currentScreen = "ReplayJourney"
+                                    } else {
+                                        Toast.makeText(context, "Internet connection required for Replay Journey", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                         }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLabelComponent
@@ -76,8 +77,10 @@ fun InsightsContent(
             )
         }
 
-        item {
-            GoalProgressCard(selectedRange = selectedRange, stats = stats)
+        if (stats.showGoal) {
+            item {
+                GoalProgressCard(selectedRange = selectedRange, stats = stats)
+            }
         }
 
         item {
@@ -240,9 +243,9 @@ fun DistanceVisualizationCard(selectedRange: String, stats: InsightsStats) {
 
             Crossfade(targetState = selectedRange, label = "ChartTransition") { range ->
                 if (range == "Week") {
-                    BarChart(stats.chartData)
+                    BarChart(stats.chartData, stats.chartLabels)
                 } else {
-                    LineChart(stats.chartData)
+                    LineChart(stats.chartData, stats.chartLabels)
                 }
             }
         }
@@ -279,7 +282,7 @@ fun rememberMarkerHapticListener(): CartesianMarkerVisibilityListener {
 }
 
 @Composable
-fun BarChart(data: List<Float>) {
+fun BarChart(data: List<Float>, labels: List<String>) {
     if (data.isEmpty() || data.all { it == 0f }) {
         Box(
             modifier = Modifier
@@ -296,8 +299,6 @@ fun BarChart(data: List<Float>) {
         return
     }
 
-    val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    
     val model = remember(data) {
         CartesianChartModel(
             ColumnCartesianLayerModel.build { series(data) }
@@ -342,6 +343,7 @@ fun BarChart(data: List<Float>) {
             markerVisibilityListener = rememberMarkerHapticListener()
         ),
         model = model,
+        scrollState = rememberVicoScrollState(),
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp)
@@ -349,7 +351,7 @@ fun BarChart(data: List<Float>) {
 }
 
 @Composable
-fun LineChart(data: List<Float>) {
+fun LineChart(data: List<Float>, labels: List<String>) {
     if (data.isEmpty() || data.all { it == 0f }) {
         Box(
             modifier = Modifier
@@ -365,8 +367,6 @@ fun LineChart(data: List<Float>) {
         }
         return
     }
-
-    val labels = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul")
 
     val model = remember(data) {
         CartesianChartModel(
@@ -411,6 +411,7 @@ fun LineChart(data: List<Float>) {
             markerVisibilityListener = rememberMarkerHapticListener()
         ),
         model = model,
+        scrollState = rememberVicoScrollState(),
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp)

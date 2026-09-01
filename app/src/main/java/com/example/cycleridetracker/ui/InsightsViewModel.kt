@@ -52,6 +52,8 @@ class InsightsViewModel @Inject constructor(
         val goal = if (range == "Week") weeklyGoal else monthlyGoal
         val displayGoal = if (useMetric) goal else goal * 0.621371f
 
+        val chartResult = prepareChartData(filteredRides, range, useMetric)
+
         InsightsStats(
             totalDistanceKmValue = "%.1f".format(totalDistanceKm),
             distanceUnit = if (useMetric) "km" else "mi",
@@ -60,8 +62,10 @@ class InsightsViewModel @Inject constructor(
             speedUnit = if (useMetric) "km/h" else "mph",
             maxSpeedValue = "%.1f".format(displayMaxSpeed),
             totalDuration = formatDuration(totalDurationMillis.toLong()),
-            chartData = prepareChartData(filteredRides, range, useMetric),
-            currentGoal = displayGoal
+            chartData = chartResult.data,
+            chartLabels = chartResult.labels,
+            currentGoal = displayGoal,
+            showGoal = range != "All Time"
         )
     }.stateIn(
         scope = viewModelScope,
@@ -73,10 +77,13 @@ class InsightsViewModel @Inject constructor(
         val startTime = when (range) {
             "Week" -> {
                 Calendar.getInstance().apply {
-                    set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+                    val dayOfWeek = get(Calendar.DAY_OF_WEEK)
+                    val daysToSubtract = (dayOfWeek - Calendar.MONDAY + 7) % 7
+                    add(Calendar.DAY_OF_YEAR, -daysToSubtract)
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
             }
             "Month" -> {
@@ -85,29 +92,81 @@ class InsightsViewModel @Inject constructor(
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
             }
             else -> 0L
         }
-        return rides.filter { it.startTimeMillis >= startTime }
+        return if (range == "All Time") rides else rides.filter { it.startTimeMillis >= startTime }
     }
 
-    private fun prepareChartData(rides: List<Ride>, range: String, useMetric: Boolean): List<Float> {
-        return if (range == "Week") {
-            val data = MutableList(7) { 0f }
-            val cal = Calendar.getInstance()
-            rides.forEach { ride ->
-                cal.timeInMillis = ride.startTimeMillis
-                val day = (cal.get(Calendar.DAY_OF_WEEK) - cal.firstDayOfWeek + 7) % 7
-                var distance = ride.distanceMeters / 1000f
-                if (!useMetric) {
-                    distance *= 0.621371f
+    private data class ChartDataResult(val data: List<Float>, val labels: List<String>)
+
+    private fun prepareChartData(rides: List<Ride>, range: String, useMetric: Boolean): ChartDataResult {
+        val cal = Calendar.getInstance()
+        val conversion = if (useMetric) 1f else 0.621371f
+
+        return when (range) {
+            "Week" -> {
+                val data = MutableList(7) { 0f }
+                val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                rides.forEach { ride ->
+                    cal.timeInMillis = ride.startTimeMillis
+                    val day = (cal.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+                    data[day] += (ride.distanceMeters / 1000f) * conversion
                 }
-                data[day] += distance
+                ChartDataResult(data, labels)
             }
-            data
-        } else {
-            List(7) { 0f }
+            "Month" -> {
+                val data = MutableList(5) { 0f }
+                val labels = listOf("W1", "W2", "W3", "W4", "W5")
+                rides.forEach { ride ->
+                    cal.timeInMillis = ride.startTimeMillis
+                    val week = (cal.get(Calendar.DAY_OF_MONTH) - 1) / 7
+                    if (week in 0..4) {
+                        data[week] += (ride.distanceMeters / 1000f) * conversion
+                    }
+                }
+                ChartDataResult(data, labels)
+            }
+            "All Time" -> {
+                if (rides.isEmpty()) return ChartDataResult(emptyList(), emptyList())
+                
+                val sortedRides = rides.sortedBy { it.startTimeMillis }
+                val firstRideTime = sortedRides.first().startTimeMillis
+                val lastRideTime = Calendar.getInstance().timeInMillis
+                
+                val startCal = Calendar.getInstance().apply { 
+                    timeInMillis = firstRideTime
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }
+                val endCal = Calendar.getInstance().apply { 
+                    timeInMillis = lastRideTime
+                    set(Calendar.DAY_OF_MONTH, 1)
+                }
+                
+                val results = mutableListOf<Float>()
+                val labels = mutableListOf<String>()
+                val monthFormat = java.text.SimpleDateFormat("MMM ''yy", java.util.Locale.getDefault())
+                
+                val tempCal = Calendar.getInstance().apply { timeInMillis = startCal.timeInMillis }
+                while (tempCal.timeInMillis <= endCal.timeInMillis) {
+                    val currentMonth = tempCal.get(Calendar.MONTH)
+                    val currentYear = tempCal.get(Calendar.YEAR)
+                    
+                    val monthDistance = rides.filter {
+                        cal.timeInMillis = it.startTimeMillis
+                        cal.get(Calendar.MONTH) == currentMonth && cal.get(Calendar.YEAR) == currentYear
+                    }.sumOf { it.distanceMeters.toDouble() }.toFloat() / 1000f * conversion
+                    
+                    results.add(monthDistance)
+                    labels.add(monthFormat.format(tempCal.time))
+                    
+                    tempCal.add(Calendar.MONTH, 1)
+                }
+                ChartDataResult(results, labels)
+            }
+            else -> ChartDataResult(emptyList(), emptyList())
         }
     }
 
@@ -127,5 +186,7 @@ data class InsightsStats(
     val maxSpeedValue: String = "0.0",
     val totalDuration: String = "0m",
     val chartData: List<Float> = emptyList(),
-    val currentGoal: Float = 50f
+    val chartLabels: List<String> = emptyList(),
+    val currentGoal: Float = 50f,
+    val showGoal: Boolean = true
 )

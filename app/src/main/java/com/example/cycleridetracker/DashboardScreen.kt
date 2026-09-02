@@ -198,18 +198,19 @@ fun ProgressMetricCard(
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = CycleRideTrackerTheme.colors.onSurfaceVariant
             )
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row {
                 Text(
                     value,
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = CycleRideTrackerTheme.colors.onSurface
+                    color = CycleRideTrackerTheme.colors.onSurface,
+                    modifier = Modifier.alignByBaseline()
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
                     unit,
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = CycleRideTrackerTheme.colors.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 2.dp)
+                    modifier = Modifier.alignByBaseline()
                 )
             }
         }

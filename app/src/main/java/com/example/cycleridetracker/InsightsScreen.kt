@@ -472,18 +472,22 @@ fun MetricCard(modifier: Modifier, icon: ImageVector, label: String, value: Stri
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row {
                 Text(
                     value,
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = CycleRideTrackerTheme.colors.onSurface
+                    color = CycleRideTrackerTheme.colors.onSurface,
+                    modifier = Modifier.alignByBaseline()
                 )
                 if (unit.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
                     Text(
                         unit,
-                        style = MaterialTheme.typography.titleSmall.copy(color = CycleRideTrackerTheme.colors.primary, fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = CycleRideTrackerTheme.colors.primary,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        modifier = Modifier.alignByBaseline()
                     )
                 }
             }

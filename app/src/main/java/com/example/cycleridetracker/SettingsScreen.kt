@@ -2,6 +2,7 @@ package com.example.cycleridetracker
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -491,6 +492,7 @@ fun GoalListItem(icon: ImageVector, title: String, subtitle: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SamplingRateDialog(
     currentRate: Long,
@@ -498,9 +500,9 @@ fun SamplingRateDialog(
     onSelect: (Long) -> Unit
 ) {
     val options = listOf(
-        1000L to "High Accuracy (1s)",
-        2000L to "Balanced (2s)",
-        5000L to "Battery Saver (5s)"
+        1000L to "1s",
+        2000L to "2s",
+        5000L to "5s"
     )
 
     AlertDialog(
@@ -508,20 +510,26 @@ fun SamplingRateDialog(
         title = { Text("GPS Sampling Rate") },
         text = {
             Column {
-                options.forEach { (rate, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(rate) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
+                Text(
+                    "Set how often GPS location is updated. Higher rates improve accuracy but consume more battery.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 20.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.forEach { (rate, label) ->
+                        FilterChip(
+                            modifier = Modifier.weight(1f),
                             selected = rate == currentRate,
-                            onClick = { onSelect(rate) }
+                            onClick = { onSelect(rate) },
+                            label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = CycleRideTrackerTheme.colors.primary,
+                                selectedLabelColor = CycleRideTrackerTheme.colors.background
+                            )
                         )
-                        Spacer(Modifier.width(12.dp))
-                        Text(label)
                     }
                 }
             }
@@ -532,6 +540,7 @@ fun SamplingRateDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PersistenceIntervalDialog(
     currentInterval: Long,
@@ -539,11 +548,11 @@ fun PersistenceIntervalDialog(
     onSelect: (Long) -> Unit
 ) {
     val options = listOf(
-        60000L to "Every 1 minute",
-        300000L to "Every 5 minutes",
-        600000L to "Every 10 minutes",
-        900000L to "Every 15 minutes",
-        1800000L to "Every 30 minutes"
+        60000L to "1 min",
+        300000L to "5 mins",
+        600000L to "10 mins",
+        900000L to "15 mins",
+        1800000L to "30 mins"
     )
 
     AlertDialog(
@@ -552,24 +561,48 @@ fun PersistenceIntervalDialog(
         text = {
             Column {
                 Text(
-                    "Choose the time interval for saving tracking data to the database. Frequent saves protect data; longer intervals save battery.",
+                    "Choose how often tracking data is saved. Frequent saves protect data; longer intervals save battery.",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 20.dp)
                 )
-                options.forEach { (interval, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(interval) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
+                
+                // First Row: 3 items
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.take(3).forEach { (interval, label) ->
+                        FilterChip(
+                            modifier = Modifier.weight(1f),
                             selected = interval == currentInterval,
-                            onClick = { onSelect(interval) }
+                            onClick = { onSelect(interval) },
+                            label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = CycleRideTrackerTheme.colors.primary,
+                                selectedLabelColor = CycleRideTrackerTheme.colors.background
+                            )
                         )
-                        Spacer(Modifier.width(12.dp))
-                        Text(label)
+                    }
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                
+                // Second Row: 2 items
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    options.drop(3).forEach { (interval, label) ->
+                        FilterChip(
+                            modifier = Modifier.weight(1f),
+                            selected = interval == currentInterval,
+                            onClick = { onSelect(interval) },
+                            label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = CycleRideTrackerTheme.colors.primary,
+                                selectedLabelColor = CycleRideTrackerTheme.colors.background
+                            )
+                        )
                     }
                 }
             }

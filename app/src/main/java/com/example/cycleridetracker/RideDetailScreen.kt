@@ -267,12 +267,14 @@ fun RideDetailScreen(
                                         
                                         mapView.clear()
                                         
-                                        val polyline = Polyline(
-                                            points = points,
-                                            strokeColor = androidx.compose.ui.graphics.Color.Cyan,
-                                            strokeWidth = 12f
-                                        )
-                                        mapView.addPolyline(polyline)
+                                        if (points.size >= 2) {
+                                            val polyline = Polyline(
+                                                points = points,
+                                                strokeColor = androidx.compose.ui.graphics.Color.Cyan,
+                                                strokeWidth = 12f
+                                            )
+                                            mapView.addPolyline(polyline)
+                                        }
                                         
                                         // Photo markers
                                         Log.d("RideDetailScreen", "Updating map markers. Photos in ride: ${currentRide.photos.size}, Bitmaps ready: ${photoMarkers.size}")

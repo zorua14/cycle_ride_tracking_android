@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -108,11 +109,12 @@ fun ActiveRideScreen(
                                 color = CycleRideTrackerTheme.colors.onSurfaceVariant
                             )
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                formatDuration(trackingState?.durationMillis ?: 0L),
+                            RollingText(
+                                text = formatDuration(trackingState?.durationMillis ?: 0L),
                                 style = MaterialTheme.typography.displayMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 72.sp
+                                    fontSize = 72.sp,
+                                    fontFeatureSettings = "tnum"
                                 ),
                                 color = CycleRideTrackerTheme.colors.onSurface
                             )
@@ -278,7 +280,8 @@ fun ActiveTelemetryCard(
                         fontWeight = FontWeight.Bold,
                         platformStyle = PlatformTextStyle(
                             includeFontPadding = false
-                        )
+                        ),
+                        fontFeatureSettings = "tnum"
                     ),
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
@@ -295,6 +298,37 @@ fun ActiveTelemetryCard(
                         color = CycleRideTrackerTheme.colors.onSurfaceVariant
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun RollingText(
+    text: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified
+) {
+    Row(modifier = modifier) {
+        text.forEach { char ->
+            AnimatedContent(
+                targetState = char,
+                transitionSpec = {
+                    (
+                            slideInVertically { it } + fadeIn()
+                            ) togetherWith (
+                            slideOutVertically { -it } + fadeOut()
+                            ) using SizeTransform(clip = false)
+                },
+                label = "RollingChar"
+            ) { targetChar ->
+                Text(
+                    text = targetChar.toString(),
+                    style = style,
+                    color = color,
+                    softWrap = false
+                )
             }
         }
     }

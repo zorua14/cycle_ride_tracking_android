@@ -311,34 +311,19 @@ fun MainApp(
             val items = listOf("Dashboard", "History", "Insights", "Settings", "RideDetail", "ReplayJourney")
             
             AnimatedContent(
-                targetState = when (currentScreen) {
-                    "RideDetail" -> "RideDetail"
-                    "ReplayJourney" -> "ReplayJourney"
-                    else -> currentScreen
-                },
+                targetState = currentScreen,
                 label = "ScreenTransition",
                 transitionSpec = {
-                    if ((initialState in listOf("RideDetail", "ReplayJourney")) ||
-                        (targetState in listOf("RideDetail", "ReplayJourney"))) {
-                        fadeIn(tween(600)) togetherWith fadeOut(tween(600))
+                    val initialIndex = items.indexOf(initialState)
+                    val targetIndex = items.indexOf(targetState)
+                    val direction = if (targetIndex > initialIndex) {
+                        AnimatedContentTransitionScope.SlideDirection.Left
                     } else {
-                        val initialIndex = items.indexOf(initialState)
-                        val targetIndex = items.indexOf(targetState)
-                        val direction = if (targetIndex > initialIndex) {
-                            AnimatedContentTransitionScope.SlideDirection.Left
-                        } else {
-                            AnimatedContentTransitionScope.SlideDirection.Right
-                        }
-
-                        (slideIntoContainer(
-                            towards = direction,
-                            animationSpec = tween(280)
-                        ) + fadeIn(animationSpec = tween(280))) togetherWith
-                                (slideOutOfContainer(
-                                    towards = direction,
-                                    animationSpec = tween(280)
-                                ) + fadeOut(animationSpec = tween(280)))
+                        AnimatedContentTransitionScope.SlideDirection.Right
                     }
+
+                    slideIntoContainer(towards = direction) togetherWith
+                            slideOutOfContainer(towards = direction)
                 },
                 modifier = Modifier.fillMaxSize()
             ) { screen ->

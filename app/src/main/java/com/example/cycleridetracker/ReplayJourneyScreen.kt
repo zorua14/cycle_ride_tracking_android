@@ -275,10 +275,11 @@ fun ReplayJourneyScreen(
                                         mapView.setCenter(pathPoints.first())
                                         mapView.setZoom(16f)
                                         mapInitialized = true
-                                    } else if (isPlaying) {
+                                    } else {
                                         // Follow the current progress point closely, but don't force zoom
-                                        val currentPoint = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
-                                        mapView.setCenter(currentPoint)
+                                        // This handles both automatic playback and manual slider scrubbing
+                                        val cp = pathPoints.getOrElse(pointIndex) { pathPoints.last() }
+                                        mapView.setCenter(cp)
                                     }
                                     endSnapped = false
                                 }
@@ -394,7 +395,10 @@ fun ReplayJourneyScreen(
                 }
                 Slider(
                     value = currentFrame.toFloat(),
-                    onValueChange = { currentFrame = it.toInt() },
+                    onValueChange = {
+                        if (isPlaying) isPlaying = false
+                        currentFrame = it.toInt()
+                    },
                     valueRange = 0f..(totalFrames - 1).toFloat().coerceAtLeast(0f),
                     colors = SliderDefaults.colors(
                         thumbColor = CycleRideTrackerTheme.colors.primary,

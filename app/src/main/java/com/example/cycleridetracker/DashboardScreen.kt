@@ -1,5 +1,6 @@
 package com.example.cycleridetracker
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,17 +11,25 @@ import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.airbnb.lottie.compose.*
 import com.example.cycleridetracker.ui.components.RecentRideCard
 import com.example.cycleridetracker.ui.components.RideData
 import com.example.cycleridetracker.ui.haptics.AppHaptics
@@ -120,29 +129,26 @@ fun WeeklyProgressSection(stats: DashboardStats) {
                 color = CycleRideTrackerTheme.colors.primary
             )
 
-            if (stats.streakDays > 0) {
-                Surface(
-                    color = CycleRideTrackerTheme.colors.primary.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Whatshot,
-                            contentDescription = null,
-                            tint = CycleRideTrackerTheme.colors.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            "${stats.streakDays} Day Streak",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = CycleRideTrackerTheme.colors.primary
-                        )
-                    }
+            val hasStreak = stats.streakDays > -1
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (hasStreak) {
+                    StreakIcon(modifier = Modifier.offset(y = (-5).dp))
+                } else {
+                    Icon(
+                        Icons.Default.Whatshot,
+                        contentDescription = null,
+                        tint = CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "${stats.streakDays} Day Streak",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = if (hasStreak) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.onSurfaceVariant
+                )
             }
         }
 
@@ -170,6 +176,21 @@ fun WeeklyProgressSection(stats: DashboardStats) {
             )
         }
     }
+}
+
+@Composable
+fun StreakIcon(modifier: Modifier = Modifier) {
+    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("blue fire.json"))
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
+
+    LottieAnimation(
+        composition = composition,
+        progress = { progress },
+        modifier = modifier.size(30.dp)
+    )
 }
 
 @Composable

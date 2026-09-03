@@ -134,10 +134,15 @@ fun ReplayJourneyScreen(
                 
                 subFrame += effectiveFps * deltaTimeSec
                 currentFrame = subFrame.toInt().coerceAtMost(totalFrames - 1)
-                
-                if (currentFrame >= totalFrames - 1) break
                 delay(16.milliseconds)
             }
+            
+            // If we reached the end naturally, pause for a moment so the user sees the rider at the finish
+            // before the map snaps out to the full view.
+            if (currentFrame >= totalFrames - 1) {
+                delay(500.milliseconds)
+            }
+            
             isPlaying = false
         }
     }
@@ -261,7 +266,7 @@ fun ReplayJourneyScreen(
                                 // 1. Zoom out only when complete (once)
                                 // 2. Set initial zoom/position once
                                 // 3. Follow rider during playback WITHOUT forcing zoom level
-                                if (isComplete) {
+                                if (isComplete && !isPlaying) {
                                     if (!endSnapped) {
                                         val avgLat = pathPoints.map { it.latitude }.average()
                                         val avgLng = pathPoints.map { it.longitude }.average()
@@ -361,7 +366,7 @@ fun ReplayJourneyScreen(
 
             val totalDistValue = rideData.distance.replace(" km", "").toDoubleOrNull() ?: 9.2
             val currentDist = (totalDistValue * currentFrame / (totalFrames - 1).coerceAtLeast(1))
-            val progressPercent = (currentFrame * 100 / totalFrames.coerceAtLeast(1))
+            val progressPercent = (currentFrame * 100 / (totalFrames - 1).coerceAtLeast(1))
 
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -383,7 +388,7 @@ fun ReplayJourneyScreen(
                         color = CycleRideTrackerTheme.colors.primary
                     )
                     Text(
-                        "FRAME $currentFrame OF $totalFrames",
+                        "FRAME ${currentFrame + 1} OF $totalFrames",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = CycleRideTrackerTheme.colors.onSurface
                     )
@@ -438,7 +443,7 @@ fun ReplayJourneyScreen(
                                 modifier = Modifier.size(32.dp)
                             )
                         }
-                        IconButton(onClick = { currentFrame = (currentFrame + 5).coerceAtMost(totalFrames) }) {
+                        IconButton(onClick = { currentFrame = (currentFrame + 5).coerceAtMost(totalFrames - 1) }) {
                             Icon(Icons.Default.FastForward, contentDescription = "Forward", tint = CycleRideTrackerTheme.colors.onSurface)
                         }
                         Surface(

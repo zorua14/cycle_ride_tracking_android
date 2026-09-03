@@ -1,40 +1,25 @@
 package com.example.cycleridetracker
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.compose.*
 import com.example.cycleridetracker.ui.components.RecentRideCard
-import com.example.cycleridetracker.ui.components.RideData
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
-import com.example.cycleridetracker.ui.theme.StreakPurple
 
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -180,7 +165,7 @@ fun WeeklyProgressSection(stats: DashboardStats) {
 
 @Composable
 fun StreakIcon(modifier: Modifier = Modifier) {
-    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("blue fire.json"))
+    val composition by rememberLottieComposition(LottieCompositionSpec.Asset("blue flame.json"))
     val progress by animateLottieCompositionAsState(
         composition = composition,
         iterations = LottieConstants.IterateForever

@@ -10,7 +10,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -83,6 +85,7 @@ fun RideDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val scrollState = rememberLazyListState()
 
     AnimatedContent(
         targetState = uiState,
@@ -90,6 +93,7 @@ fun RideDetailScreen(
             fadeIn() togetherWith fadeOut()
         },
         label = "RideDetailTransition",
+        contentKey = { it::class }
     ) { state ->
         when (state) {
             is RideDetailUiState.Loading -> {
@@ -109,7 +113,8 @@ fun RideDetailScreen(
                     onReplayClick = onReplayClick,
                     viewModel = viewModel,
                     haptic = haptic,
-                    context = context
+                    context = context,
+                    scrollState = scrollState
                 )
             }
         }
@@ -124,7 +129,8 @@ fun RideDetailSuccessContent(
     onReplayClick: () -> Unit,
     viewModel: RideDetailViewModel,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
-    context: android.content.Context
+    context: android.content.Context,
+    scrollState: LazyListState
 ) {
     val currentRide = state.ride
     val useMetric = state.useMetric
@@ -231,6 +237,7 @@ fun RideDetailSuccessContent(
             containerColor = CycleRideTrackerTheme.colors.background
         ) { innerPadding ->
             LazyColumn(
+                state = scrollState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),

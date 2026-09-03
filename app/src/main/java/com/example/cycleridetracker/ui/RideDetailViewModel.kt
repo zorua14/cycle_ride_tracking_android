@@ -14,8 +14,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import androidx.exifinterface.media.ExifInterface
+import android.content.ContentUris
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -62,76 +66,119 @@ class RideDetailViewModel @Inject constructor(
 
     val useMetric: StateFlow<Boolean> = appPrefs.useMetric
 
-    fun addPhoto(uri: Uri) {
+    fun addPhotos(uris: List<Uri>) {
         val currentState = (_uiState.value as? RideDetailUiState.Success) ?: return
-        val currentRide = currentState.ride
+        val rideId = currentState.ride.id
 
         viewModelScope.launch {
-            Log.d("EXIF_FLOW", "--- Start Processing Photo ---")
-            Log.d("EXIF_FLOW", "Original URI: $uri")
+            Log.d("EXIF_FLOW", "--- Start Processing ${uris.size} Photos ---")
             
-            // 1. Get location from source URI (best chance)
-            val location = withContext(Dispatchers.IO) { getExifLocationFromUri(uri) }
-            Log.d("EXIF_FLOW", "Final Location Decided: $location")
+            val newPhotos = uris.map { uri ->
+                async(Dispatchers.IO) {
+                    val location = getExifLocationFromUri(uri)
+                    val savedUri = saveImageToInternalStorage(uri)
+                    
+                    if (savedUri != null) {
+                        com.example.cycleridetracker.data.RidePhoto(
+                            uri = savedUri.toString(),
+                            latitude = location?.first,
+                            longitude = location?.second
+                        )
+                    } else null
+                }
+            }.awaitAll().filterNotNull()
 
-            // 2. Save file for persistence
-            val savedUri = withContext(Dispatchers.IO) { saveImageToInternalStorage(uri) }
-            
-            if (savedUri != null) {
-                val newPhoto = com.example.cycleridetracker.data.RidePhoto(
-                    uri = savedUri.toString(),
-                    latitude = location?.first,
-                    longitude = location?.second
-                )
-                val updatedPhotos = currentRide.photos + newPhoto
-                val updatedRide = currentRide.copy(photos = updatedPhotos)
-                withContext(Dispatchers.IO) { repository.updateRide(updatedRide) }
-                _uiState.value = currentState.copy(ride = updatedRide)
-                Log.d("EXIF_FLOW", "Photo saved and state updated.")
-            } else {
-                Log.e("EXIF_FLOW", "Failed to save image.")
+            if (newPhotos.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    // Get latest ride from DB to avoid overwriting photos added by concurrent calls
+                    val currentRide = repository.getRideById(rideId) ?: return@withContext
+                    val updatedRide = currentRide.copy(photos = currentRide.photos + newPhotos)
+                    repository.updateRide(updatedRide)
+                    
+                    _uiState.update { state ->
+                        if (state is RideDetailUiState.Success && state.ride.id == rideId) {
+                            state.copy(ride = updatedRide)
+                        } else state
+                    }
+                }
+                Log.d("EXIF_FLOW", "${newPhotos.size} photos saved and state updated.")
             }
         }
     }
 
+    fun addPhoto(uri: Uri) {
+        addPhotos(listOf(uri))
+    }
+
     private fun getExifLocationFromUri(uri: Uri): Pair<Double, Double>? {
-        var photoUri = uri
         try {
-            // For API 29+, need to request the original URI to get GPS tags
-            // This requires ACCESS_MEDIA_LOCATION permission
-            if (uri.scheme == "content") {
-                
-                val hasPermission = ContextCompat.checkSelfPermission(
-                    context, 
-                    android.Manifest.permission.ACCESS_MEDIA_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-                
-                if (hasPermission) {
-                    try {
-                        photoUri = MediaStore.setRequireOriginal(uri)
-                        Log.d("EXIF_FLOW", "Used setRequireOriginal for Media URI")
-                    } catch (e: Exception) {
-                        Log.w("EXIF_FLOW", "Could not setRequireOriginal for URI: $uri. Error: ${e.message}")
+            // 1. Try reading directly from the provided URI
+            val location = readExifLocation(uri)
+            if (location != null) return location
+
+            // 2. If no location, check if it's a Picker URI and try to map it to MediaStore
+            // Photo Picker URIs redact EXIF by design, so we try to find the original record.
+            if (uri.toString().contains("com.android.providers.media.photopicker")) {
+                val mediaId = uri.lastPathSegment?.toLongOrNull()
+                if (mediaId != null) {
+                    val mediaStoreUri = ContentUris.withAppendedId(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        mediaId
+                    )
+                    
+                    val hasLocationPerm = ContextCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.ACCESS_MEDIA_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    
+                    val hasMediaPerm = ContextCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.READ_MEDIA_IMAGES
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasLocationPerm && hasMediaPerm) {
+                        try {
+                            val originalUri = MediaStore.setRequireOriginal(mediaStoreUri)
+                            return readExifLocation(originalUri)
+                        } catch (e: Exception) {
+                            Log.w("EXIF_FLOW", "Could not get original EXIF from MediaStore for ID $mediaId: ${e.message}")
+                        }
                     }
-                } else {
-                    Log.w("EXIF_FLOW", "ACCESS_MEDIA_LOCATION permission not granted. GPS data will be redacted.")
                 }
             }
 
-            context.contentResolver.openInputStream(photoUri)?.use { inputStream ->
+            // 3. Fallback for non-picker content URIs
+            if (uri.scheme == "content" && !uri.toString().contains("photopicker")) {
+                try {
+                    val originalUri = MediaStore.setRequireOriginal(uri)
+                    return readExifLocation(originalUri)
+                } catch (e: Exception) {
+                    Log.w("EXIF_FLOW", "Could not setRequireOriginal for generic URI: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("EXIF_FLOW", "Error in getExifLocationFromUri: ${e.message}")
+        }
+        return null
+    }
+
+    private fun readExifLocation(uri: Uri): Pair<Double, Double>? {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 val exif = ExifInterface(inputStream)
                 val latLong = exif.latLong
                 if (latLong != null) {
                     Log.i("EXIF_FLOW", "SUCCESS: Found LatLong: ${latLong[0]}, ${latLong[1]}")
-                    return latLong[0] to latLong[1]
+                    latLong[0] to latLong[1]
                 } else {
-                    Log.w("EXIF_FLOW", "No LatLong tags found in this image (URI: $photoUri)")
+                    Log.d("EXIF_FLOW", "No LatLong tags found for URI: $uri")
+                    null
                 }
             }
         } catch (e: Exception) {
-            Log.e("EXIF_FLOW", "Error reading EXIF: ${e.message}", e)
+            // Rethrow to be caught by getExifLocationFromUri
+            throw e
         }
-        return null
     }
 
     private fun saveImageToInternalStorage(uri: Uri): Uri? {

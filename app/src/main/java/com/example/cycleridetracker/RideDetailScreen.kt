@@ -47,8 +47,9 @@ import com.example.cycleridetracker.ui.RideDetailViewModel
 import com.example.cycleridetracker.ui.RideDetailUiState
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.animation.core.Animatable
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
 import androidx.compose.ui.geometry.Offset
@@ -170,15 +171,24 @@ fun RideDetailSuccessContent(
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.addPhoto(it) }
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            viewModel.addPhotos(uris)
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        photoPickerLauncher.launch("image/*")
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locationGranted = permissions[Manifest.permission.ACCESS_MEDIA_LOCATION] ?: false
+        val mediaGranted = permissions[Manifest.permission.READ_MEDIA_IMAGES] ?: false
+        
+        if (locationGranted || mediaGranted) {
+            photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -472,15 +482,27 @@ fun RideDetailSuccessContent(
                         SectionHeader("RIDE PHOTOS (${currentRide.photos.size})")
                         TextButton(onClick = { 
                             AppHaptics.performAction(haptic)
-                            val hasPermission = ContextCompat.checkSelfPermission(
+                            val hasLocationPerm = ContextCompat.checkSelfPermission(
                                 context, 
                                 Manifest.permission.ACCESS_MEDIA_LOCATION
                             ) == PackageManager.PERMISSION_GRANTED
                             
-                            if (hasPermission) {
-                                photoPickerLauncher.launch("image/*")
+                            val hasMediaPerm = ContextCompat.checkSelfPermission(
+                                context, 
+                                Manifest.permission.READ_MEDIA_IMAGES
+                            ) == PackageManager.PERMISSION_GRANTED
+                            
+                            if (hasLocationPerm && hasMediaPerm) {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
                             } else {
-                                permissionLauncher.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_MEDIA_LOCATION,
+                                        Manifest.permission.READ_MEDIA_IMAGES
+                                    )
+                                )
                             }
                         }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -506,15 +528,27 @@ fun RideDetailSuccessContent(
                         }
                         item {
                             AddPhotoPlaceholder(onClick = { 
-                                val hasPermission = ContextCompat.checkSelfPermission(
+                                val hasLocationPerm = ContextCompat.checkSelfPermission(
                                     context, 
                                     Manifest.permission.ACCESS_MEDIA_LOCATION
                                 ) == PackageManager.PERMISSION_GRANTED
                                 
-                                if (hasPermission) {
-                                    photoPickerLauncher.launch("image/*")
+                                val hasMediaPerm = ContextCompat.checkSelfPermission(
+                                    context, 
+                                    Manifest.permission.READ_MEDIA_IMAGES
+                                ) == PackageManager.PERMISSION_GRANTED
+                                
+                                if (hasLocationPerm && hasMediaPerm) {
+                                    photoPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
                                 } else {
-                                    permissionLauncher.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+                                    permissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_MEDIA_LOCATION,
+                                            Manifest.permission.READ_MEDIA_IMAGES
+                                        )
+                                    )
                                 }
                             })
                         }

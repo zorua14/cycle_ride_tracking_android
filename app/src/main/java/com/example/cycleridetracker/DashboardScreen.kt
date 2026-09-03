@@ -114,7 +114,7 @@ fun WeeklyProgressSection(stats: DashboardStats) {
                 color = CycleRideTrackerTheme.colors.primary
             )
 
-            val hasStreak = stats.streakDays > -1
+            val hasStreak = stats.streakDays > 0
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {

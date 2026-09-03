@@ -49,19 +49,54 @@ import kotlin.math.roundToInt
 
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.cycleridetracker.ui.InsightsViewModel
 import com.example.cycleridetracker.ui.InsightsStats
+import com.example.cycleridetracker.ui.InsightsUiState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 
 @Composable
 fun InsightsContent(
     contentPadding: PaddingValues = PaddingValues(16.dp),
-    viewModel: InsightsViewModel = hiltViewModel()
+    viewModel: InsightsViewModel = hiltViewModel(),
 ) {
     val haptic = LocalHapticFeedback.current
-    val selectedRange by viewModel.selectedRange.collectAsStateWithLifecycle()
-    val stats by viewModel.insightsStats.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    AnimatedContent(
+        targetState = uiState,
+        transitionSpec = {
+            fadeIn() togetherWith fadeOut()
+        },
+        label = "InsightsTransition",
+    ) { state ->
+        when (state) {
+            is InsightsUiState.Loading -> {
+                InsightsLoadingPlaceholder(contentPadding)
+            }
+            is InsightsUiState.Success -> {
+                InsightsSuccessContent(
+                    state = state,
+                    contentPadding = contentPadding,
+                    viewModel = viewModel,
+                    haptic = haptic
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun InsightsSuccessContent(
+    state: InsightsUiState.Success,
+    contentPadding: PaddingValues,
+    viewModel: InsightsViewModel,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
@@ -69,28 +104,27 @@ fun InsightsContent(
     ) {
         item {
             TimeRangeSelector(
-                selected = selectedRange,
-                onSelected = {
-                    viewModel.selectRange(it)
-                    AppHaptics.performSelection(haptic)
-                }
-            )
+                selected = state.selectedRange,
+            ) {
+                viewModel.selectRange(it)
+                AppHaptics.performSelection(haptic)
+            }
         }
 
-        if (stats.showGoal) {
+        if (state.stats.showGoal) {
             item {
-                GoalProgressCard(selectedRange = selectedRange, stats = stats)
+                GoalProgressCard(selectedRange = state.selectedRange, stats = state.stats)
             }
         }
 
         item {
             InsightsSectionTitle(title = "DISTANCE VISUALIZATION")
-            DistanceVisualizationCard(selectedRange = selectedRange, stats = stats)
+            DistanceVisualizationCard(selectedRange = state.selectedRange, stats = state.stats)
         }
 
         item {
             InsightsSectionTitle(title = "RIDE PERFORMANCE METRICS")
-            PerformanceMetricsGrid(stats = stats)
+            PerformanceMetricsGrid(stats = state.stats)
         }
 
         item {
@@ -99,6 +133,36 @@ fun InsightsContent(
         }
     }
 }
+
+@Composable
+fun InsightsLoadingPlaceholder(contentPadding: PaddingValues) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .background(CycleRideTrackerTheme.colors.cardBackground, RoundedCornerShape(24.dp))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(CycleRideTrackerTheme.colors.cardBackground, RoundedCornerShape(24.dp))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .background(CycleRideTrackerTheme.colors.cardBackground, RoundedCornerShape(24.dp))
+        )
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -1,0 +1,12 @@
+- [x] Create `UiState` for all screens and offload processing to background threads
+    - [x] `DashboardViewModel`
+    - [x] `HistoryViewModel`
+    - [x] `InsightsViewModel`
+    - [x] `RideDetailViewModel`
+- [x] Offload marker creation in `MarkerUtils`
+- [x] Implement `Loading` UI and transitions in Screens
+    - [x] `DashboardScreen`
+    - [x] `HistoryScreen`
+    - [x] `InsightsScreen`
+    - [x] `RideDetailScreen`
+- [x] Verify changes

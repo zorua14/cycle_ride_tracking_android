@@ -46,7 +46,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 
 import dagger.hilt.android.AndroidEntryPoint
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.cycleridetracker.ui.ActiveRideViewModel
 import com.example.cycleridetracker.ui.DashboardViewModel
 import com.example.cycleridetracker.ui.HistoryViewModel

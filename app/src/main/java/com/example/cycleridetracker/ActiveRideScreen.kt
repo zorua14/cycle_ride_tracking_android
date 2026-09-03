@@ -24,7 +24,7 @@ import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.cycleridetracker.data.ActiveRideState
 import com.example.cycleridetracker.ui.ActiveRideViewModel
 import java.util.Locale

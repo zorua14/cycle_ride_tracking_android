@@ -2,7 +2,11 @@ package com.example.cycleridetracker
 
 import android.util.Log
 import android.view.MotionEvent
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,13 +15,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -36,17 +40,19 @@ import com.example.cycleridetracker.data.Ride
 import androidx.compose.ui.viewinterop.AndroidView
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.cycleridetracker.ui.RideDetailViewModel
+import com.example.cycleridetracker.ui.RideDetailUiState
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.Animatable
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
-import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
 import android.net.Uri
@@ -67,43 +73,73 @@ fun RideDetailScreen(
     rideId: Int,
     onBack: () -> Unit,
     onReplayClick: () -> Unit,
-    viewModel: RideDetailViewModel = hiltViewModel()
+    viewModel: RideDetailViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(rideId) {
         viewModel.loadRide(rideId)
     }
 
-    val ride by viewModel.ride.collectAsStateWithLifecycle()
-    val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
 
-    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
-    val networkStatus by connectivityObserver.observe().collectAsState(
-        initial = ConnectivityObserver.Status.Available
-    )
-
-    LaunchedEffect(networkStatus) {
-        Log.d("RideDetailScreen", "Network status changed: $networkStatus")
-    }
-
-    if (ride == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+    AnimatedContent(
+        targetState = uiState,
+        transitionSpec = {
+            fadeIn() togetherWith fadeOut()
+        },
+        label = "RideDetailTransition",
+    ) { state ->
+        when (state) {
+            is RideDetailUiState.Loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            is RideDetailUiState.Error -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Failed to load ride detail.")
+                }
+            }
+            is RideDetailUiState.Success -> {
+                RideDetailSuccessContent(
+                    state = state,
+                    onBack = onBack,
+                    onReplayClick = onReplayClick,
+                    viewModel = viewModel,
+                    haptic = haptic,
+                    context = context
+                )
+            }
         }
-        return
     }
+}
 
-    val currentRide = ride!!
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RideDetailSuccessContent(
+    state: RideDetailUiState.Success,
+    onBack: () -> Unit,
+    onReplayClick: () -> Unit,
+    viewModel: RideDetailViewModel,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    context: android.content.Context
+) {
+    val currentRide = state.ride
+    val useMetric = state.useMetric
     val rideData = currentRide.toRideData(useMetric)
     val photoMarkers = remember { mutableStateMapOf<String, android.graphics.Bitmap>() }
     
-    var mapInitialized by remember(rideId) { mutableStateOf(false) }
     
     var fullScreenPhotoUri by remember { mutableStateOf<String?>(null) }
     var showDeleteRideDialog by remember { mutableStateOf(false) }
     var showEditTitleDialog by remember { mutableStateOf(false) }
     var showDeletePhotoDialog by remember { mutableStateOf<String?>(null) }
+
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val networkStatus by connectivityObserver.observe().collectAsState(
+        initial = ConnectivityObserver.Status.Available
+    )
 
     BackHandler(enabled = fullScreenPhotoUri != null) {
         fullScreenPhotoUri = null
@@ -112,17 +148,16 @@ fun RideDetailScreen(
     LaunchedEffect(currentRide.photos) {
         Log.d("RideDetailScreen", "LaunchedEffect triggered for ${currentRide.photos.size} photos")
         currentRide.photos.forEach { photo ->
-            if (photo.latitude != null && !photoMarkers.containsKey(photo.uri)) {
+            if ((photo.latitude != null) && !photoMarkers.containsKey(photo.uri)) {
                 Log.d("RideDetailScreen", "Processing photo marker for ${photo.uri} at ${photo.latitude}, ${photo.longitude}")
-                val markerBitmap = MarkerUtils.loadMarkerBitmap(context, photo.uri)
-                if (markerBitmap != null) {
-                    Log.d("RideDetailScreen", "Marker bitmap created for ${photo.uri}")
-                    photoMarkers[photo.uri] = markerBitmap
-                } else {
-                    Log.w("RideDetailScreen", "Failed to create marker bitmap for ${photo.uri}")
+                // Offload bitmap loading and marker creation to background
+                launch(Dispatchers.Default) {
+                    val markerBitmap = MarkerUtils.loadMarkerBitmap(context, photo.uri)
+                    if (markerBitmap != null) {
+                        Log.d("RideDetailScreen", "Marker bitmap created for ${photo.uri}")
+                        photoMarkers[photo.uri] = markerBitmap
+                    }
                 }
-            } else if (photo.latitude == null) {
-                Log.w("RideDetailScreen", "Photo ${photo.uri} has no location data")
             }
         }
     }
@@ -135,9 +170,7 @@ fun RideDetailScreen(
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        // Whether granted or not, we launch the picker. 
-        // If not granted, EXIF location will simply be null.
+    ) { _ ->
         photoPickerLauncher.launch("image/*")
     }
 
@@ -175,10 +208,12 @@ fun RideDetailScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { 
-                            AppHaptics.performAction(haptic)
-                            showDeleteRideDialog = true 
-                        }) {
+                        IconButton(
+                            onClick = { 
+                                AppHaptics.performAction(haptic)
+                                showDeleteRideDialog = true 
+                            }
+                        ) {
                             Icon(
                                 Icons.Default.DeleteOutline,
                                 contentDescription = "Delete Ride",
@@ -243,18 +278,21 @@ fun RideDetailScreen(
                             AndroidView(
                                 factory = { context ->
                                     de.afarber.openmapview.OpenMapView(context).apply {
-                                        // Request parent (LazyColumn) to not intercept touch events 
-                                        // when the user is interacting with the map.
                                         setOnTouchListener { v, event ->
                                             when (event.action) {
                                                 MotionEvent.ACTION_DOWN -> {
                                                     v.parent.requestDisallowInterceptTouchEvent(true)
                                                 }
-                                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                                MotionEvent.ACTION_UP -> {
+                                                    v.parent.requestDisallowInterceptTouchEvent(false)
+                                                    v.performClick()
+                                                }
+                                                MotionEvent.ACTION_CANCEL -> {
                                                     v.parent.requestDisallowInterceptTouchEvent(false)
                                                 }
                                             }
                                             v.onTouchEvent(event)
+                                            true
                                         }
                                     }
                                 },
@@ -270,25 +308,20 @@ fun RideDetailScreen(
                                         if (points.size >= 2) {
                                             val polyline = Polyline(
                                                 points = points,
-                                                strokeColor = androidx.compose.ui.graphics.Color.Cyan,
+                                                strokeColor = Color.Cyan,
                                                 strokeWidth = 12f
                                             )
                                             mapView.addPolyline(polyline)
                                         }
                                         
                                         // Photo markers
-                                        Log.d("RideDetailScreen", "Updating map markers. Photos in ride: ${currentRide.photos.size}, Bitmaps ready: ${photoMarkers.size}")
                                         currentRide.photos.forEach { photo ->
                                             if (photo.latitude != null && photo.longitude != null) {
                                                 val customBitmap = photoMarkers[photo.uri]
-                                                val markerIcon = if (customBitmap != null) {
-                                                    BitmapDescriptor.BitmapMarker(customBitmap)
-                                                } else {
-                                                    Log.d("RideDetailScreen", "No custom bitmap yet for ${photo.uri}, using default")
-                                                    null // Default marker
+                                                val markerIcon = customBitmap?.let { 
+                                                    BitmapDescriptor.BitmapMarker(it) 
                                                 }
 
-                                                Log.d("RideDetailScreen", "Adding marker to map at ${photo.latitude}, ${photo.longitude}")
                                                 mapView.addMarker(Marker(
                                                     position = LatLng(photo.latitude, photo.longitude),
                                                     title = "Photo",
@@ -298,13 +331,12 @@ fun RideDetailScreen(
                                             }
                                         }
                                         
-                                        // Zoom and center only once to allow free dragging thereafter
-                                        if (!mapInitialized && currentRide.pathPoints.isNotEmpty()) {
-                                            val avgLat = currentRide.pathPoints.map { it.latitude }.average()
-                                            val avgLng = currentRide.pathPoints.map { it.longitude }.average()
+                                        if (mapView.tag != "initialized" && currentRide.pathPoints.isNotEmpty()) {
+                                            val avgLat = currentRide.pathPoints.asSequence().map { it.latitude }.average()
+                                            val avgLng = currentRide.pathPoints.asSequence().map { it.longitude }.average()
                                             mapView.setCenter(LatLng(avgLat, avgLng))
                                             mapView.setZoom(14f)
-                                            mapInitialized = true
+                                            mapView.tag = "initialized"
                                         }
                                     }
                                 }
@@ -497,13 +529,13 @@ fun RideDetailScreen(
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Default.Notes,
+                                    Icons.AutoMirrored.Default.Notes,
                                     contentDescription = null,
                                     tint = CycleRideTrackerTheme.colors.onSurfaceVariant
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Text(
-                                    text = if (currentRide.notes.isEmpty()) "Add a note to this ride..." else currentRide.notes,
+                                    text = currentRide.notes.ifEmpty { "Add a note to this ride..." },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (currentRide.notes.isEmpty()) CycleRideTrackerTheme.colors.onSurfaceVariant else CycleRideTrackerTheme.colors.onSurface
                                 )

@@ -1,5 +1,6 @@
 package com.example.cycleridetracker
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,11 +24,13 @@ import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.cycleridetracker.data.Ride
 import com.example.cycleridetracker.ui.DashboardViewModel
 import com.example.cycleridetracker.ui.DashboardStats
+import com.example.cycleridetracker.ui.DashboardUiState
 import com.example.cycleridetracker.ui.utils.ConnectivityObserver
+import androidx.compose.animation.*
 
 @Composable
 fun DashboardContent(
@@ -36,38 +39,74 @@ fun DashboardContent(
     onReplayLatest: (Ride) -> Unit = {},
     onViewAllClick: () -> Unit = {},
     networkStatus: ConnectivityObserver.Status = ConnectivityObserver.Status.Available,
-    viewModel: DashboardViewModel = hiltViewModel()
+    viewModel: DashboardViewModel = hiltViewModel(),
 ) {
-    val recentRides by viewModel.recentRides.collectAsStateWithLifecycle()
-    val stats by viewModel.weeklyStats.collectAsStateWithLifecycle()
-    val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val haptic = LocalHapticFeedback.current
 
+    AnimatedContent(
+        targetState = uiState,
+        transitionSpec = {
+            fadeIn() togetherWith fadeOut()
+        },
+        label = "DashboardTransition",
+    ) { state ->
+        when (state) {
+            is DashboardUiState.Loading -> {
+                DashboardLoadingPlaceholder(contentPadding)
+            }
+            is DashboardUiState.Success -> {
+                DashboardSuccessContent(
+                    state = state,
+                    contentPadding = contentPadding,
+                    onRideClick = onRideClick,
+                    onReplayLatest = onReplayLatest,
+                    onViewAllClick = onViewAllClick,
+                    networkStatus = networkStatus,
+                    hapticsEnabled = hapticsEnabled,
+                    haptic = haptic
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DashboardSuccessContent(
+    state: DashboardUiState.Success,
+    contentPadding: PaddingValues,
+    onRideClick: (Ride) -> Unit,
+    onReplayLatest: (Ride) -> Unit,
+    onViewAllClick: () -> Unit,
+    networkStatus: ConnectivityObserver.Status,
+    hapticsEnabled: Boolean,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         item {
-            WeeklyProgressSection(stats)
+            WeeklyProgressSection(state.stats)
         }
 
         item {
             RecentRidesSection(
-                rides = recentRides.take(4),
-                useMetric = useMetric,
+                rides = state.recentRides.take(4),
+                useMetric = state.useMetric,
                 hapticsEnabled = hapticsEnabled,
                 haptic = haptic,
                 onRideClick = onRideClick,
                 onReplayLatest = {
-                    recentRides.firstOrNull()?.let { onReplayLatest(it) }
+                    state.recentRides.firstOrNull()?.let { onReplayLatest(it) }
                 },
                 isOffline = networkStatus != ConnectivityObserver.Status.Available
             )
         }
 
-        if (recentRides.isNotEmpty()) {
+        if (state.recentRides.isNotEmpty()) {
             item {
                 Button(
                     onClick = {
@@ -94,6 +133,36 @@ fun DashboardContent(
         }
     }
 }
+
+@Composable
+fun DashboardLoadingPlaceholder(contentPadding: PaddingValues) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // Stats placeholder
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .background(CycleRideTrackerTheme.colors.cardBackground, RoundedCornerShape(16.dp))
+        )
+        // Recent rides placeholder
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(3) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .background(CycleRideTrackerTheme.colors.cardBackground, RoundedCornerShape(16.dp))
+                )
+            }
+        }
+    }
+}
+
 
 // DashboardHeader is now handled by MainActivity's TopAppBar
 
@@ -278,8 +347,7 @@ fun RecentRidesSection(
                     ride = ride.toRideData(useMetric),
                     haptic = haptic,
                     hapticsEnabled = hapticsEnabled,
-                    onClick = { onRideClick(ride) }
-                )
+                ) { onRideClick(ride) }
             }
         }
     }

@@ -2,6 +2,7 @@ package com.example.cycleridetracker.ui
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -20,38 +21,61 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+sealed interface RideDetailUiState {
+    object Loading : RideDetailUiState
+    data class Success(
+        val ride: Ride,
+        val useMetric: Boolean,
+    ) : RideDetailUiState
+    object Error : RideDetailUiState
+}
 
 @HiltViewModel
 class RideDetailViewModel @Inject constructor(
     private val repository: RideRepository,
     private val appPrefs: AppPrefs,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    val useMetric: StateFlow<Boolean> = appPrefs.useMetric
-
-    private val _ride = MutableStateFlow<Ride?>(null)
-    val ride: StateFlow<Ride?> = _ride
+    private val _uiState = MutableStateFlow<RideDetailUiState>(RideDetailUiState.Loading)
+    val uiState: StateFlow<RideDetailUiState> = _uiState
 
     fun loadRide(rideId: Int) {
         viewModelScope.launch {
-            _ride.value = repository.getRideById(rideId)
+            _uiState.value = RideDetailUiState.Loading
+            val ride = withContext(Dispatchers.IO) {
+                repository.getRideById(rideId)
+            }
+            val useMetric = withContext(Dispatchers.IO) {
+                appPrefs.useMetric.value // Assuming we can get current value or collect
+            }
+            if (ride != null) {
+                _uiState.value = RideDetailUiState.Success(ride, useMetric)
+            } else {
+                _uiState.value = RideDetailUiState.Error
+            }
         }
     }
 
+    val useMetric: StateFlow<Boolean> = appPrefs.useMetric
+
     fun addPhoto(uri: Uri) {
-        val currentRide = _ride.value ?: return
+        val currentState = (_uiState.value as? RideDetailUiState.Success) ?: return
+        val currentRide = currentState.ride
 
         viewModelScope.launch {
             Log.d("EXIF_FLOW", "--- Start Processing Photo ---")
             Log.d("EXIF_FLOW", "Original URI: $uri")
             
             // 1. Get location from source URI (best chance)
-            val location = getExifLocationFromUri(uri)
+            val location = withContext(Dispatchers.IO) { getExifLocationFromUri(uri) }
             Log.d("EXIF_FLOW", "Final Location Decided: $location")
 
             // 2. Save file for persistence
-            val savedUri = saveImageToInternalStorage(uri)
+            val savedUri = withContext(Dispatchers.IO) { saveImageToInternalStorage(uri) }
             
             if (savedUri != null) {
                 val newPhoto = com.example.cycleridetracker.data.RidePhoto(
@@ -61,8 +85,8 @@ class RideDetailViewModel @Inject constructor(
                 )
                 val updatedPhotos = currentRide.photos + newPhoto
                 val updatedRide = currentRide.copy(photos = updatedPhotos)
-                repository.updateRide(updatedRide)
-                _ride.value = updatedRide
+                withContext(Dispatchers.IO) { repository.updateRide(updatedRide) }
+                _uiState.value = currentState.copy(ride = updatedRide)
                 Log.d("EXIF_FLOW", "Photo saved and state updated.")
             } else {
                 Log.e("EXIF_FLOW", "Failed to save image.")
@@ -127,44 +151,50 @@ class RideDetailViewModel @Inject constructor(
     }
 
     fun updateNotes(notes: String) {
-        val currentRide = _ride.value ?: return
+        val currentState = _uiState.value as? RideDetailUiState.Success ?: return
+        val currentRide = currentState.ride
         val updatedRide = currentRide.copy(notes = notes)
         viewModelScope.launch {
-            repository.updateRide(updatedRide)
-            _ride.value = updatedRide
+            withContext(Dispatchers.IO) { repository.updateRide(updatedRide) }
+            _uiState.value = currentState.copy(ride = updatedRide)
         }
     }
 
     fun updateTitle(title: String) {
-        val currentRide = _ride.value ?: return
+        val currentState = _uiState.value as? RideDetailUiState.Success ?: return
+        val currentRide = currentState.ride
         val updatedRide = currentRide.copy(title = title)
         viewModelScope.launch {
-            repository.updateRide(updatedRide)
-            _ride.value = updatedRide
+            withContext(Dispatchers.IO) { repository.updateRide(updatedRide) }
+            _uiState.value = currentState.copy(ride = updatedRide)
         }
     }
 
     fun deleteRide() {
-        val currentRide = _ride.value ?: return
+        val currentState = _uiState.value as? RideDetailUiState.Success ?: return
+        val currentRide = currentState.ride
         viewModelScope.launch {
-            repository.deleteRide(currentRide.id)
-            _ride.value = null
+            withContext(Dispatchers.IO) { repository.deleteRide(currentRide.id) }
+            _uiState.value = RideDetailUiState.Error
         }
     }
 
     fun deletePhoto(photoUri: String) {
-        val currentRide = _ride.value ?: return
+        val currentState = _uiState.value as? RideDetailUiState.Success ?: return
+        val currentRide = currentState.ride
         val updatedPhotos = currentRide.photos.filterNot { it.uri == photoUri }
         val updatedRide = currentRide.copy(photos = updatedPhotos)
         viewModelScope.launch {
-            repository.updateRide(updatedRide)
-            _ride.value = updatedRide
+            withContext(Dispatchers.IO) { repository.updateRide(updatedRide) }
+            _uiState.value = currentState.copy(ride = updatedRide)
             
             // Optionally delete the file from internal storage
             try {
-                val file = File(Uri.parse(photoUri).path ?: "")
-                if (file.exists()) {
-                    file.delete()
+                withContext(Dispatchers.IO) {
+                    val file = File(photoUri.toUri().path ?: "")
+                    if (file.exists()) {
+                        file.delete()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("EXIF_FLOW", "Failed to delete photo file: ${e.message}")
@@ -172,3 +202,4 @@ class RideDetailViewModel @Inject constructor(
         }
     }
 }
+

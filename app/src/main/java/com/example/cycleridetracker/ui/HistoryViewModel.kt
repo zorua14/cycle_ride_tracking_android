@@ -10,10 +10,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import java.util.Calendar
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 
 enum class SortOption {
     DATE, DISTANCE, DURATION, SPEED
@@ -27,35 +28,51 @@ enum class FilterOption {
     ALL, WEEK, MONTH, YEAR
 }
 
+sealed interface HistoryUiState {
+    object Loading : HistoryUiState
+    data class Success(
+        val rides: List<Ride>,
+        val query: String,
+        val useMetric: Boolean,
+    ) : HistoryUiState
+}
+
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
-    private val repository: RideRepository,
-    private val appPrefs: AppPrefs
+    repository: RideRepository,
+    appPrefs: AppPrefs,
 ) : ViewModel() {
 
     val useMetric: StateFlow<Boolean> = appPrefs.useMetric
     val hapticsEnabled: StateFlow<Boolean> = appPrefs.hapticsEnabled
 
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery
-
     private val _sortOption = MutableStateFlow(SortOption.DATE)
     val sortOption: StateFlow<SortOption> = _sortOption
-
+    
     private val _sortOrder = MutableStateFlow(SortOrder.DESCENDING)
     val sortOrder: StateFlow<SortOrder> = _sortOrder
-
+    
     private val _filterOption = MutableStateFlow(FilterOption.ALL)
     val filterOption: StateFlow<FilterOption> = _filterOption
 
-    val allRides: StateFlow<List<Ride>> = combine(
+    @Suppress("UNCHECKED_CAST")
+    val uiState: StateFlow<HistoryUiState> = combine(
         repository.getAllRides(),
         _searchQuery,
         _sortOption,
         _sortOrder,
-        _filterOption
-    ) { rides, query, sort, order, filter ->
-        rides.asSequence()
+        _filterOption,
+        appPrefs.useMetric
+    ) { flows: Array<Any> ->
+        val rides = flows[0] as List<Ride>
+        val query = flows[1] as String
+        val sort = flows[2] as SortOption
+        val order = flows[3] as SortOrder
+        val filter = flows[4] as FilterOption
+        val useMetric = flows[5] as Boolean
+
+        val processedRides = rides.asSequence()
             .filter { ride ->
                 ride.title.contains(query, ignoreCase = true) ||
                 ride.notes.contains(query, ignoreCase = true)
@@ -105,10 +122,14 @@ class HistoryViewModel @Inject constructor(
                 if (order == SortOrder.ASCENDING) comparison else -comparison
             }
             .toList()
-    }.stateIn(
+
+        HistoryUiState.Success(processedRides, query, useMetric)
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
+        initialValue = HistoryUiState.Loading
     )
 
     fun onSearchQueryChange(query: String) {

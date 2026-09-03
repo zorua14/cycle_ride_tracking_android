@@ -12,26 +12,29 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
+
+sealed interface DashboardUiState {
+    object Loading : DashboardUiState
+    data class Success(
+        val recentRides: List<Ride>,
+        val stats: DashboardStats,
+        val useMetric: Boolean,
+    ) : DashboardUiState
+}
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val repository: RideRepository,
-    private val appPrefs: AppPrefs
+    repository: RideRepository,
+    appPrefs: AppPrefs,
 ) : ViewModel() {
 
     val useMetric: StateFlow<Boolean> = appPrefs.useMetric
     val hapticsEnabled: StateFlow<Boolean> = appPrefs.hapticsEnabled
 
-    val recentRides: StateFlow<List<Ride>> = repository.getAllRides()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    val weeklyStats = combine(
+    val uiState: StateFlow<DashboardUiState> = combine(
         repository.getAllRides(),
         appPrefs.weeklyGoal,
         appPrefs.useMetric
@@ -55,23 +58,33 @@ class DashboardViewModel @Inject constructor(
         
         val streak = calculateStreak(rides)
 
-        DashboardStats(
-            distanceValue = "%.1f".format(totalDistanceKm),
-            distanceUnit = if (useMetric) "km" else "mi",
-            ridesCount = weekRides.size.toString(),
-            timeMinutes = totalTimeMinutes.toInt().toString(),
-            streakDays = streak
+        DashboardUiState.Success(
+            recentRides = rides.take(10),
+            stats = DashboardStats(
+                distanceValue = "%.1f".format(totalDistanceKm),
+                distanceUnit = if (useMetric) "km" else "mi",
+                ridesCount = weekRides.size.toString(),
+                timeMinutes = totalTimeMinutes.toInt().toString(),
+                streakDays = streak
+            ),
+            useMetric = useMetric
         )
-    }.stateIn(
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = DashboardStats()
+        initialValue = DashboardUiState.Loading
     )
 
     private fun calculateStreak(rides: List<Ride>): Int {
         if (rides.isEmpty()) return 0
         val dayMillis = 24 * 60 * 60 * 1000L
-        val rideDates = rides.map { it.startTimeMillis / dayMillis }.distinct().sortedDescending()
+        val rideDates = rides.asSequence()
+            .map { it.startTimeMillis / dayMillis }
+            .distinct()
+            .sortedDescending()
+            .toList()
         
         var streak = 0
         val today = System.currentTimeMillis() / dayMillis

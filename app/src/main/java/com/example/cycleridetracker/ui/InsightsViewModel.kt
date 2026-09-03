@@ -13,21 +13,30 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import java.util.Calendar
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
+
+sealed interface InsightsUiState {
+    object Loading : InsightsUiState
+    data class Success(
+        val stats: InsightsStats,
+        val selectedRange: String,
+    ) : InsightsUiState
+}
 
 @HiltViewModel
 class InsightsViewModel @Inject constructor(
-    private val repository: RideRepository,
-    private val appPrefs: AppPrefs
+    repository: RideRepository,
+    appPrefs: AppPrefs,
 ) : ViewModel() {
 
     private val _selectedRange = MutableStateFlow("Week")
-    val selectedRange: StateFlow<String> = _selectedRange
 
     fun selectRange(range: String) {
         _selectedRange.value = range
     }
 
-    val insightsStats = combine(
+    val uiState: StateFlow<InsightsUiState> = combine(
         repository.getAllRides(),
         _selectedRange,
         appPrefs.weeklyGoal,
@@ -41,7 +50,9 @@ class InsightsViewModel @Inject constructor(
             totalDistanceKm *= 0.621371f
         }
 
-        val avgSpeed = if (filteredRides.isNotEmpty()) filteredRides.map { it.averageSpeedKmh }.average() else 0.0
+        val avgSpeed = if (filteredRides.isNotEmpty()) {
+            filteredRides.asSequence().map { it.averageSpeedKmh }.average()
+        } else 0.0
         val maxSpeed = if (filteredRides.isNotEmpty()) filteredRides.maxOf { it.maxSpeedKmh } else 0.0f
         
         val displayAvgSpeed = if (useMetric) avgSpeed else avgSpeed * 0.621371f
@@ -54,23 +65,28 @@ class InsightsViewModel @Inject constructor(
 
         val chartResult = prepareChartData(filteredRides, range, useMetric)
 
-        InsightsStats(
-            totalDistanceKmValue = "%.1f".format(totalDistanceKm),
-            distanceUnit = if (useMetric) "km" else "mi",
-            rideCount = filteredRides.size,
-            avgSpeedValue = "%.1f".format(displayAvgSpeed),
-            speedUnit = if (useMetric) "km/h" else "mph",
-            maxSpeedValue = "%.1f".format(displayMaxSpeed),
-            totalDuration = formatDuration(totalDurationMillis.toLong()),
-            chartData = chartResult.data,
-            chartLabels = chartResult.labels,
-            currentGoal = displayGoal,
-            showGoal = range != "All Time"
+        InsightsUiState.Success(
+            stats = InsightsStats(
+                totalDistanceKmValue = "%.1f".format(totalDistanceKm),
+                distanceUnit = if (useMetric) "km" else "mi",
+                rideCount = filteredRides.size,
+                avgSpeedValue = "%.1f".format(displayAvgSpeed),
+                speedUnit = if (useMetric) "km/h" else "mph",
+                maxSpeedValue = "%.1f".format(displayMaxSpeed),
+                totalDuration = formatDuration(totalDurationMillis.toLong()),
+                chartData = chartResult.data,
+                chartLabels = chartResult.labels,
+                currentGoal = displayGoal,
+                showGoal = range != "All Time"
+            ),
+            selectedRange = range
         )
-    }.stateIn(
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = InsightsStats()
+        initialValue = InsightsUiState.Loading
     )
 
     private fun filterRidesByRange(rides: List<Ride>, range: String): List<Ride> {
@@ -78,7 +94,7 @@ class InsightsViewModel @Inject constructor(
             "Week" -> {
                 Calendar.getInstance().apply {
                     val dayOfWeek = get(Calendar.DAY_OF_WEEK)
-                    val daysToSubtract = (dayOfWeek - Calendar.MONDAY + 7) % 7
+                    val daysToSubtract = ((dayOfWeek - Calendar.MONDAY) + 7) % 7
                     add(Calendar.DAY_OF_YEAR, -daysToSubtract)
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
@@ -112,7 +128,7 @@ class InsightsViewModel @Inject constructor(
                 val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                 rides.forEach { ride ->
                     cal.timeInMillis = ride.startTimeMillis
-                    val day = (cal.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+                    val day = ((cal.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY) + 7) % 7
                     data[day] += (ride.distanceMeters / 1000f) * conversion
                 }
                 ChartDataResult(data, labels)
@@ -154,7 +170,7 @@ class InsightsViewModel @Inject constructor(
                     val currentMonth = tempCal.get(Calendar.MONTH)
                     val currentYear = tempCal.get(Calendar.YEAR)
                     
-                    val monthDistance = rides.filter {
+                    val monthDistance = rides.asSequence().filter {
                         cal.timeInMillis = it.startTimeMillis
                         cal.get(Calendar.MONTH) == currentMonth && cal.get(Calendar.YEAR) == currentYear
                     }.sumOf { it.distanceMeters.toDouble() }.toFloat() / 1000f * conversion

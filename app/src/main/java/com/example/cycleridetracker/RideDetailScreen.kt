@@ -58,6 +58,7 @@ import coil.compose.AsyncImage
 import android.net.Uri
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.compose.foundation.layout.Arrangement
 import androidx.core.content.ContextCompat
 import com.example.cycleridetracker.ui.utils.MarkerUtils
 import com.example.cycleridetracker.ui.utils.ConnectivityObserver
@@ -838,7 +839,7 @@ fun TelemetryCard(
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.Start
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -867,7 +868,7 @@ fun TelemetryCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Start
             ) {
                 Text(
                     text = value,

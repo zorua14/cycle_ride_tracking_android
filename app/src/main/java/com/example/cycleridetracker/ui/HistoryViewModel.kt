@@ -77,6 +77,7 @@ class HistoryViewModel @Inject constructor(
                 ride.title.contains(query, ignoreCase = true) ||
                 ride.notes.contains(query, ignoreCase = true)
             }
+            .filter { ride -> ride.isFinished }
             .filter { ride ->
                 when (filter) {
                     FilterOption.ALL -> true

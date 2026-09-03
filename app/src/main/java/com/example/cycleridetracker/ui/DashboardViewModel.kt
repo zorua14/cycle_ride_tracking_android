@@ -59,7 +59,7 @@ class DashboardViewModel @Inject constructor(
         val streak = calculateStreak(rides)
 
         DashboardUiState.Success(
-            recentRides = rides.take(10),
+            recentRides = rides.take(10).filter { ride -> ride.isFinished },
             stats = DashboardStats(
                 distanceValue = "%.1f".format(totalDistanceKm),
                 distanceUnit = if (useMetric) "km" else "mi",

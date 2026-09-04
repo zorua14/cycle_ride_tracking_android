@@ -21,9 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import com.example.cycleridetracker.data.ActiveRideState
-import com.example.cycleridetracker.ui.ActiveRideViewModel
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -32,12 +31,11 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ActiveRideIndicator(
-    viewModel: ActiveRideViewModel,
+    activeRideState: ActiveRideState,
     isVisible: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val activeRideState by viewModel.activeRideState.collectAsStateWithLifecycle()
     val isTracking = activeRideState is ActiveRideState.Tracking
     val trackingData = activeRideState as? ActiveRideState.Tracking
     val isPaused = trackingData?.isPaused == true
@@ -50,12 +48,12 @@ fun ActiveRideIndicator(
     val coroutineScope = rememberCoroutineScope()
     
     // Initial position: Right edge, middle
-    var hasInitializedPosition by remember { mutableStateOf(false) }
+    var hasInitializedPosition by remember { mutableStateOf(value = false) }
     val offsetX = remember { Animatable(screenWidthPx) }
     val offsetY = remember { Animatable(screenHeightPx / 2f) }
     
-    var componentWidth by remember { mutableStateOf(0f) }
-    var componentHeight by remember { mutableStateOf(0f) }
+    var componentWidth by remember { mutableFloatStateOf(0f) }
+    var componentHeight by remember { mutableFloatStateOf(0f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
@@ -70,7 +68,7 @@ fun ActiveRideIndicator(
 
     // Handle visibility changes and initial positioning
     LaunchedEffect(isVisible, isTracking, screenWidthPx, componentWidth) {
-        if (isVisible && isTracking && !hasInitializedPosition && componentWidth > 0) {
+        if ((isVisible && isTracking && !hasInitializedPosition && componentWidth > 0)) {
             offsetX.snapTo(screenWidthPx - componentWidth - with(density) { 16.dp.toPx() })
             hasInitializedPosition = true
         }

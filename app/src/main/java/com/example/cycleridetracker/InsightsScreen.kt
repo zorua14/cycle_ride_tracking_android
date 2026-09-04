@@ -59,8 +59,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 
+@Immutable
+data class ChartData(
+    val data: List<Float>,
+    val labels: List<String>
+)
+
 @Composable
 fun InsightsContent(
+    modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     viewModel: InsightsViewModel = hiltViewModel(),
 ) {
@@ -82,8 +89,9 @@ fun InsightsContent(
                 InsightsSuccessContent(
                     state = state,
                     contentPadding = contentPadding,
-                    viewModel = viewModel,
-                    haptic = haptic
+                    onRangeSelect = { viewModel.selectRange(it) },
+                    haptic = haptic,
+                    modifier = modifier,
                 )
             }
         }
@@ -94,40 +102,42 @@ fun InsightsContent(
 fun InsightsSuccessContent(
     state: InsightsUiState.Success,
     contentPadding: PaddingValues,
-    viewModel: InsightsViewModel,
-    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback
+    onRangeSelect: (String) -> Unit,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        item {
+        item(contentType = "RangeSelector") {
             TimeRangeSelector(
                 selected = state.selectedRange,
-            ) {
-                viewModel.selectRange(it)
-                AppHaptics.performSelection(haptic)
-            }
+                onRangeSelect = {
+                    onRangeSelect(it)
+                    AppHaptics.performSelection(haptic)
+                }
+            )
         }
 
         if (state.stats.showGoal) {
-            item {
+            item(contentType = "GoalProgress") {
                 GoalProgressCard(selectedRange = state.selectedRange, stats = state.stats)
             }
         }
 
-        item {
+        item(contentType = "DistanceVisualization") {
             InsightsSectionTitle(title = "DISTANCE VISUALIZATION")
             DistanceVisualizationCard(selectedRange = state.selectedRange, stats = state.stats)
         }
 
-        item {
+        item(contentType = "PerformanceMetrics") {
             InsightsSectionTitle(title = "RIDE PERFORMANCE METRICS")
             PerformanceMetricsGrid(stats = state.stats)
         }
 
-        item {
+        item(contentType = "EnvironmentalImpact") {
             InsightsSectionTitle(title = "ENVIRONMENTAL & CO2 FOOTPRINT")
             EnvironmentalPlaceholder()
         }
@@ -135,9 +145,12 @@ fun InsightsSuccessContent(
 }
 
 @Composable
-fun InsightsLoadingPlaceholder(contentPadding: PaddingValues) {
+fun InsightsLoadingPlaceholder(
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -166,18 +179,22 @@ fun InsightsLoadingPlaceholder(contentPadding: PaddingValues) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
+fun TimeRangeSelector(
+    selected: String,
+    onRangeSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val options = listOf("Week", "Month", "All Time")
     val icons = listOf(Icons.Default.ViewWeek, Icons.Default.CalendarMonth, Icons.Default.AllInclusive)
 
     SingleChoiceSegmentedButtonRow(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         for (index in options.indices) {
             val option = options[index]
             SegmentedButton(
                 selected = selected == option,
-                onClick = { onSelected(option) },
+                onClick = { onRangeSelect(option) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                 colors = SegmentedButtonDefaults.colors(
                     activeContainerColor = CycleRideTrackerTheme.colors.primary,
@@ -204,7 +221,11 @@ fun TimeRangeSelector(selected: String, onSelected: (String) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun GoalProgressCard(selectedRange: String, stats: InsightsStats) {
+fun GoalProgressCard(
+    selectedRange: String,
+    stats: InsightsStats,
+    modifier: Modifier = Modifier
+) {
     val goal = stats.currentGoal
     val current = stats.totalDistanceKmValue.toFloatOrNull() ?: 0f
     val targetProgress = (current / goal).coerceIn(0f, 1f)
@@ -219,7 +240,7 @@ fun GoalProgressCard(selectedRange: String, stats: InsightsStats) {
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {
@@ -273,9 +294,13 @@ fun GoalProgressCard(selectedRange: String, stats: InsightsStats) {
 }
 
 @Composable
-fun DistanceVisualizationCard(selectedRange: String, stats: InsightsStats) {
+fun DistanceVisualizationCard(
+    selectedRange: String,
+    stats: InsightsStats,
+    modifier: Modifier = Modifier
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {
@@ -306,10 +331,11 @@ fun DistanceVisualizationCard(selectedRange: String, stats: InsightsStats) {
             Spacer(Modifier.height(24.dp))
 
             Crossfade(targetState = selectedRange, label = "ChartTransition") { range ->
+                val chartData = ChartData(stats.chartData, stats.chartLabels)
                 if (range == "Week") {
-                    BarChart(stats.chartData, stats.chartLabels)
+                    BarChart(chartData)
                 } else {
-                    LineChart(stats.chartData, stats.chartLabels)
+                    LineChart(chartData)
                 }
             }
         }
@@ -317,16 +343,18 @@ fun DistanceVisualizationCard(selectedRange: String, stats: InsightsStats) {
 }
 
 @Composable
-fun rememberMarkerHapticListener(): CartesianMarkerVisibilityListener {
+fun rememberMarkerHapticListener(
+    lastX: Double?,
+    onLastXChange: (Double?) -> Unit,
+): CartesianMarkerVisibilityListener {
     val haptic = LocalHapticFeedback.current
-    var lastX by remember { mutableStateOf<Double?>(null) }
-    return remember(haptic) {
+    return remember(haptic, lastX) {
         object : CartesianMarkerVisibilityListener {
             override fun onShown(marker: CartesianMarker, targets: List<CartesianMarker.Target>) {
                 val newX = targets.firstOrNull()?.x
                 if (newX != lastX) {
                     AppHaptics.performAction(haptic)
-                    lastX = newX
+                    onLastXChange(newX)
                 }
             }
 
@@ -334,22 +362,28 @@ fun rememberMarkerHapticListener(): CartesianMarkerVisibilityListener {
                 val newX = targets.firstOrNull()?.x
                 if (newX != lastX) {
                     AppHaptics.performAction(haptic)
-                    lastX = newX
+                    onLastXChange(newX)
                 }
             }
 
             override fun onHidden(marker: CartesianMarker) {
-                lastX = null
+                onLastXChange(null)
             }
         }
     }
 }
 
 @Composable
-fun BarChart(data: List<Float>, labels: List<String>) {
+fun BarChart(
+    chartData: ChartData,
+    modifier: Modifier = Modifier,
+) {
+    val data = chartData.data
+    val labels = chartData.labels
+    var lastX by remember { mutableStateOf<Double?>(null) }
     if (data.isEmpty() || data.all { it == 0f }) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .height(200.dp),
             contentAlignment = Alignment.Center
@@ -360,65 +394,73 @@ fun BarChart(data: List<Float>, labels: List<String>) {
                 color = CycleRideTrackerTheme.colors.onSurfaceVariant
             )
         }
-        return
-    }
+    } else {
+        val model = remember(data) {
+            CartesianChartModel(
+                ColumnCartesianLayerModel.build { series(data) }
+            )
+        }
+        
+        val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
+            labels.getOrNull(value.toInt()) ?: ""
+        }
 
-    val model = remember(data) {
-        CartesianChartModel(
-            ColumnCartesianLayerModel.build { series(data) }
+        val colors = CycleRideTrackerTheme.colors
+
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberColumnCartesianLayer(
+                    columnProvider = ColumnCartesianLayer.ColumnProvider.series(
+                        rememberLineComponent(
+                            fill = Fill(colors.primary),
+                            thickness = 12.dp,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    )
+                ),
+                startAxis = VerticalAxis.rememberStart(
+                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                    line = null,
+                    tick = null,
+                    guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
+                ),
+                bottomAxis = HorizontalAxis.rememberBottom(
+                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                    line = null,
+                    tick = null,
+                    valueFormatter = bottomAxisValueFormatter
+                ),
+                marker = rememberDefaultCartesianMarker(
+                    label = rememberTextComponent(
+                        style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
+                        background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
+                    )
+                ),
+                markerVisibilityListener = rememberMarkerHapticListener(
+                lastX = lastX,
+                onLastXChange = { lastX = it }
+            )
+            ),
+            model = model,
+            scrollState = rememberVicoScrollState(),
+            modifier = modifier
+                .fillMaxWidth()
+                .height(200.dp)
         )
     }
-    
-    val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
-        labels.getOrNull(value.toInt()) ?: ""
-    }
-
-    val colors = CycleRideTrackerTheme.colors
-
-    CartesianChartHost(
-        chart = rememberCartesianChart(
-            rememberColumnCartesianLayer(
-                columnProvider = ColumnCartesianLayer.ColumnProvider.series(
-                    rememberLineComponent(
-                        fill = Fill(colors.primary),
-                        thickness = 12.dp,
-                        shape = RoundedCornerShape(4.dp)
-                    )
-                )
-            ),
-            startAxis = VerticalAxis.rememberStart(
-                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                line = null,
-                tick = null,
-                guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
-            ),
-            bottomAxis = HorizontalAxis.rememberBottom(
-                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                line = null,
-                tick = null,
-                valueFormatter = bottomAxisValueFormatter
-            ),
-            marker = rememberDefaultCartesianMarker(
-                label = rememberTextComponent(
-                    style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
-                    background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
-                )
-            ),
-            markerVisibilityListener = rememberMarkerHapticListener()
-        ),
-        model = model,
-        scrollState = rememberVicoScrollState(),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-    )
 }
 
 @Composable
-fun LineChart(data: List<Float>, labels: List<String>) {
+fun LineChart(
+    chartData: ChartData,
+    modifier: Modifier = Modifier,
+) {
+    val data = chartData.data
+    val labels = chartData.labels
+    var lastX by remember { mutableStateOf<Double?>(null) }
     if (data.isEmpty() || data.all { it == 0f }) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .height(200.dp),
             contentAlignment = Alignment.Center
@@ -429,62 +471,67 @@ fun LineChart(data: List<Float>, labels: List<String>) {
                 color = CycleRideTrackerTheme.colors.onSurfaceVariant
             )
         }
-        return
-    }
+    } else {
+        val model = remember(data) {
+            CartesianChartModel(
+                LineCartesianLayerModel.build { series(data) }
+            )
+        }
 
-    val model = remember(data) {
-        CartesianChartModel(
-            LineCartesianLayerModel.build { series(data) }
+        val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
+            labels.getOrNull(value.toInt()) ?: ""
+        }
+
+        val colors = CycleRideTrackerTheme.colors
+
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberLineCartesianLayer(
+                    lineProvider = LineCartesianLayer.LineProvider.series(
+                        LineCartesianLayer.rememberLine(
+                            fill = LineCartesianLayer.LineFill.single(Fill(colors.primary)),
+                            areaFill = LineCartesianLayer.AreaFill.single(Fill(colors.primary.copy(alpha = 0.2f)))
+                        )
+                    )
+                ),
+                startAxis = VerticalAxis.rememberStart(
+                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                    line = null,
+                    tick = null,
+                    guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
+                ),
+                bottomAxis = HorizontalAxis.rememberBottom(
+                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
+                    line = null,
+                    tick = null,
+                    valueFormatter = bottomAxisValueFormatter
+                ),
+                marker = rememberDefaultCartesianMarker(
+                    label = rememberTextComponent(
+                        style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
+                        background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
+                    )
+                ),
+                markerVisibilityListener = rememberMarkerHapticListener(
+                lastX = lastX,
+                onLastXChange = { lastX = it }
+            )
+            ),
+            model = model,
+            scrollState = rememberVicoScrollState(),
+            modifier = modifier
+                .fillMaxWidth()
+                .height(200.dp)
         )
     }
-
-    val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
-        labels.getOrNull(value.toInt()) ?: ""
-    }
-
-    val colors = CycleRideTrackerTheme.colors
-
-    CartesianChartHost(
-        chart = rememberCartesianChart(
-            rememberLineCartesianLayer(
-                lineProvider = LineCartesianLayer.LineProvider.series(
-                    LineCartesianLayer.rememberLine(
-                        fill = LineCartesianLayer.LineFill.single(Fill(colors.primary)),
-                        areaFill = LineCartesianLayer.AreaFill.single(Fill(colors.primary.copy(alpha = 0.2f)))
-                    )
-                )
-            ),
-            startAxis = VerticalAxis.rememberStart(
-                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                line = null,
-                tick = null,
-                guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
-            ),
-            bottomAxis = HorizontalAxis.rememberBottom(
-                label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                line = null,
-                tick = null,
-                valueFormatter = bottomAxisValueFormatter
-            ),
-            marker = rememberDefaultCartesianMarker(
-                label = rememberTextComponent(
-                    style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
-                    background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
-                )
-            ),
-            markerVisibilityListener = rememberMarkerHapticListener()
-        ),
-        model = model,
-        scrollState = rememberVicoScrollState(),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(200.dp)
-    )
 }
 
 @Composable
-fun PerformanceMetricsGrid(stats: InsightsStats) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+fun PerformanceMetricsGrid(stats: InsightsStats, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             MetricCard(
                 modifier = Modifier.weight(1f),
@@ -515,7 +562,13 @@ fun PerformanceMetricsGrid(stats: InsightsStats) {
 }
 
 @Composable
-fun MetricCard(modifier: Modifier, icon: ImageVector, label: String, value: String, unit: String) {
+fun MetricCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier,
+) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -560,17 +613,17 @@ fun MetricCard(modifier: Modifier, icon: ImageVector, label: String, value: Stri
 }
 
 @Composable
-fun EnvironmentalPlaceholder() {
+fun EnvironmentalPlaceholder(modifier: Modifier = Modifier) {
     Text(
         "CO2 savings and environmental impact data will appear here as you track more rides.",
         style = MaterialTheme.typography.bodySmall,
         color = CycleRideTrackerTheme.colors.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 8.dp)
+        modifier = modifier.padding(vertical = 8.dp)
     )
 }
 
 @Composable
-fun InsightsSectionTitle(title: String) {
+fun InsightsSectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge.copy(
@@ -578,13 +631,13 @@ fun InsightsSectionTitle(title: String) {
             letterSpacing = 1.sp,
             fontWeight = FontWeight.Bold
         ),
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = modifier.padding(bottom = 8.dp)
     )
 }
 
 @Preview(showBackground = true)
 @Composable
-fun InsightsScreenPreview() {
+private fun InsightsScreenPreview() {
     CycleRideTrackerTheme {
         InsightsContent()
     }

@@ -1,7 +1,7 @@
 package com.example.cycleridetracker
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -33,20 +33,21 @@ import java.util.Locale
 @Composable
 fun ActiveRideScreen(
     onFinish: () -> Unit,
-    viewModel: ActiveRideViewModel = hiltViewModel()
+    modifier: Modifier = Modifier,
+    viewModel: ActiveRideViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.activeRideState.collectAsStateWithLifecycle()
     val trackingState = remember(uiState) { uiState as? ActiveRideState.Tracking }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(viewModel) {
         if (uiState is ActiveRideState.Idle) {
             viewModel.startRide()
         }
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = CycleRideTrackerTheme.colors.background
+        modifier = modifier.fillMaxSize(),
+        color = CycleRideTrackerTheme.colors.background,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
@@ -87,7 +88,7 @@ fun ActiveRideScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                item {
+                item(contentType = "Timer") {
                     // Elapsed Time
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -122,7 +123,7 @@ fun ActiveRideScreen(
                     }
                 }
 
-                item {
+                item(contentType = "Telemetry") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -144,7 +145,7 @@ fun ActiveRideScreen(
                     }
                 }
 
-                item {
+                item(contentType = "Controls") {
                     Spacer(Modifier.height(16.dp))
                     // Controls
                     Box(
@@ -233,11 +234,11 @@ fun ActiveRideScreen(
 
 @Composable
 fun ActiveTelemetryCard(
-    modifier: Modifier,
     icon: ImageVector,
     label: String,
     value: String,
-    unit: String
+    unit: String,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier,
@@ -348,7 +349,7 @@ private fun formatDuration(millis: Long): String {
 
 @Preview(showBackground = true)
 @Composable
-fun ActiveRidePreview() {
+private fun ActiveRidePreview() {
     CycleRideTrackerTheme(darkTheme = true) {
         ActiveRideScreen(onFinish = {})
     }

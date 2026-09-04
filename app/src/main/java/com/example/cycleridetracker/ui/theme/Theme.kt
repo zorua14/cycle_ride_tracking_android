@@ -3,6 +3,7 @@ package com.example.cycleridetracker.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -14,6 +15,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -28,7 +30,7 @@ data class AppColors(
     val onSurfaceVariant: Color = Color.Unspecified,
     val largeTitle: Color = Color.Unspecified,
     val outline: Color = Color.Unspecified,
-    val cardBackground: Color = Color.Unspecified
+    val cardBackground: Color = Color.Unspecified,
 )
 
 val LocalAppColors = staticCompositionLocalOf { AppColors() }
@@ -71,21 +73,20 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun CycleRideTrackerTheme(
+    modifier: Modifier = Modifier,
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val baseColorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
-
-    val colorScheme = baseColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -99,21 +100,23 @@ fun CycleRideTrackerTheme(
     }
 
     val appColors = AppColors(
-        primary = colorScheme.primary,
-        background = colorScheme.background,
-        surface = colorScheme.surface,
-        onSurface = colorScheme.onSurface,
-        onSurfaceVariant = colorScheme.onSurfaceVariant,
+        primary = baseColorScheme.primary,
+        background = baseColorScheme.background,
+        surface = baseColorScheme.surface,
+        onSurface = baseColorScheme.onSurface,
+        onSurfaceVariant = baseColorScheme.onSurfaceVariant,
         largeTitle = if (darkTheme) Cyan400 else Navy900,
-        outline = colorScheme.outline,
+        outline = baseColorScheme.outline,
         cardBackground = if (darkTheme) Navy800 else Color.LightGray.copy(alpha = 0.1f)
     )
 
     CompositionLocalProvider(LocalAppColors provides appColors) {
-        MaterialTheme(
-            colorScheme = colorScheme,
-            typography = Typography,
-            content = content
-        )
+        Box(modifier = modifier) {
+            MaterialTheme(
+                colorScheme = baseColorScheme,
+                typography = Typography,
+                content = content
+            )
+        }
     }
 }

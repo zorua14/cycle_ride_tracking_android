@@ -16,11 +16,11 @@ import androidx.compose.ui.unit.dp
 import com.example.cycleridetracker.ui.components.RecentRideCard
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.animation.*
 
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+
+
+
+
 import com.example.cycleridetracker.data.Ride
 import com.example.cycleridetracker.ui.HistoryViewModel
 import com.example.cycleridetracker.ui.HistoryUiState
@@ -33,13 +33,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 fun HistoryContent(
+    uiState: HistoryUiState,
+    hapticsEnabled: Boolean,
+    onSearchQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     onRideClick: (Ride) -> Unit = {},
-    viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val haptic = LocalHapticFeedback.current
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
 
     AnimatedContent(
         targetState = uiState,
@@ -59,7 +60,8 @@ fun HistoryContent(
                     onRideClick = onRideClick,
                     haptic = haptic,
                     hapticsEnabled = hapticsEnabled,
-                    viewModel = viewModel
+                    onSearchQueryChange = onSearchQueryChange,
+                    modifier = modifier,
                 )
             }
         }
@@ -73,22 +75,23 @@ fun HistorySuccessContent(
     onRideClick: (Ride) -> Unit,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     hapticsEnabled: Boolean,
-    viewModel: HistoryViewModel
+    onSearchQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isEmpty = state.rides.isEmpty() && state.query.isEmpty()
 
     if (isEmpty) {
-        HistoryEmptyState(contentPadding)
+        HistoryEmptyState(contentPadding, modifier = modifier)
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier.fillMaxSize(),
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(contentType = "Search") {
                 OutlinedTextField(
                     value = state.query,
-                    onValueChange = { viewModel.onSearchQueryChange(it) },
+                    onValueChange = onSearchQueryChange,
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Search rides, notes...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
@@ -102,7 +105,7 @@ fun HistorySuccessContent(
             }
             
             if (state.rides.isEmpty()) {
-                item {
+                item(contentType = "EmptyResults") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -117,7 +120,11 @@ fun HistorySuccessContent(
                     }
                 }
             } else {
-                items(state.rides) { ride ->
+                items(
+                    items = state.rides,
+                    key = { it.id },
+                    contentType = { "Ride" }
+                ) { ride ->
                     RecentRideCard(
                         ride = ride.toRideData(state.useMetric),
                         haptic = haptic,
@@ -130,9 +137,12 @@ fun HistorySuccessContent(
 }
 
 @Composable
-fun HistoryEmptyState(contentPadding: PaddingValues) {
+fun HistoryEmptyState(
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(contentPadding),
         contentAlignment = Alignment.Center
@@ -173,9 +183,12 @@ fun HistoryEmptyState(contentPadding: PaddingValues) {
 }
 
 @Composable
-fun HistoryLoadingPlaceholder(contentPadding: PaddingValues) {
+fun HistoryLoadingPlaceholder(
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -200,10 +213,14 @@ fun HistoryLoadingPlaceholder(contentPadding: PaddingValues) {
 
 @Preview(showBackground = true)
 @Composable
-fun HistoryPreview() {
+private fun HistoryPreview() {
     CycleRideTrackerTheme(darkTheme = true) {
         Surface(color = MaterialTheme.colorScheme.background) {
-            HistoryContent()
+            HistoryContent(
+                uiState = HistoryUiState.Loading,
+                hapticsEnabled = true,
+                onSearchQueryChange = {}
+            )
         }
     }
 }

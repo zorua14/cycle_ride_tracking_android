@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +39,7 @@ import com.example.cycleridetracker.ui.theme.Cyan400
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
 import com.example.cycleridetracker.ui.theme.Navy700
 
-import com.example.cycleridetracker.data.Ride
+
 import androidx.compose.ui.viewinterop.AndroidView
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,7 +53,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +77,7 @@ fun RideDetailScreen(
     rideId: Int,
     onBack: () -> Unit,
     onReplayClick: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: RideDetailViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(rideId) {
@@ -94,7 +95,7 @@ fun RideDetailScreen(
             fadeIn() togetherWith fadeOut()
         },
         label = "RideDetailTransition",
-        contentKey = { it::class }
+        contentKey = { it::class },
     ) { state ->
         when (state) {
             is RideDetailUiState.Loading -> {
@@ -112,10 +113,15 @@ fun RideDetailScreen(
                     state = state,
                     onBack = onBack,
                     onReplayClick = onReplayClick,
-                    viewModel = viewModel,
+                    onAddPhotos = { viewModel.addPhotos(it) },
+                    onUpdateNotes = { viewModel.updateNotes(it) },
+                    onDeleteRide = { viewModel.deleteRide() },
+                    onUpdateTitle = { viewModel.updateTitle(it) },
+                    onDeletePhoto = { viewModel.deletePhoto(it) },
                     haptic = haptic,
                     context = context,
-                    scrollState = scrollState
+                    scrollState = scrollState,
+                    modifier = modifier
                 )
             }
         }
@@ -128,25 +134,39 @@ fun RideDetailSuccessContent(
     state: RideDetailUiState.Success,
     onBack: () -> Unit,
     onReplayClick: () -> Unit,
-    viewModel: RideDetailViewModel,
+    onAddPhotos: (List<Uri>) -> Unit,
+    onUpdateNotes: (String) -> Unit,
+    onDeleteRide: () -> Unit,
+    onUpdateTitle: (String) -> Unit,
+    onDeletePhoto: (String) -> Unit,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     context: android.content.Context,
-    scrollState: LazyListState
+    scrollState: LazyListState,
+    modifier: Modifier = Modifier
 ) {
     val currentRide = state.ride
     val useMetric = state.useMetric
     val rideData = currentRide.toRideData(useMetric)
     val photoMarkers = remember { mutableStateMapOf<String, android.graphics.Bitmap>() }
+    val pathPoints = remember(currentRide.pathPoints) {
+        currentRide.pathPoints.map { LatLng(it.latitude, it.longitude) }
+    }
+    val avgLat = remember(currentRide.pathPoints) {
+        currentRide.pathPoints.asSequence().map { it.latitude }.average()
+    }
+    val avgLng = remember(currentRide.pathPoints) {
+        currentRide.pathPoints.asSequence().map { it.longitude }.average()
+    }
     
     
-    var fullScreenPhotoUri by remember { mutableStateOf<String?>(null) }
-    var showDeleteRideDialog by remember { mutableStateOf(false) }
-    var showEditTitleDialog by remember { mutableStateOf(false) }
-    var showDeletePhotoDialog by remember { mutableStateOf<String?>(null) }
+    var fullScreenPhotoUri by rememberSaveable { mutableStateOf<String?>(value = null) }
+    var showDeleteRideDialog by rememberSaveable { mutableStateOf(value = false) }
+    var showEditTitleDialog by rememberSaveable { mutableStateOf(value = false) }
+    var showDeletePhotoDialog by rememberSaveable { mutableStateOf<String?>(value = null) }
 
     val connectivityObserver = remember { NetworkConnectivityObserver(context) }
-    val networkStatus by connectivityObserver.observe().collectAsState(
-        initial = ConnectivityObserver.Status.Available
+    val networkStatus by connectivityObserver.observe().collectAsStateWithLifecycle(
+        initialValue = ConnectivityObserver.Status.Available
     )
 
     BackHandler(enabled = fullScreenPhotoUri != null) {
@@ -174,7 +194,7 @@ fun RideDetailSuccessContent(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            viewModel.addPhotos(uris)
+            onAddPhotos(uris)
         }
     }
 
@@ -191,7 +211,7 @@ fun RideDetailSuccessContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -254,7 +274,7 @@ fun RideDetailSuccessContent(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                item {
+                item(contentType = "Map") {
                     // OpenStreetMap View
                     Box(
                         modifier = Modifier
@@ -316,16 +336,12 @@ fun RideDetailSuccessContent(
                                 },
                                 modifier = Modifier.fillMaxSize(),
                                 update = { mapView ->
-                                    if (currentRide.pathPoints.isNotEmpty()) {
-                                        val points = currentRide.pathPoints.map { 
-                                            LatLng(it.latitude, it.longitude)
-                                        }
-                                        
+                                    if (pathPoints.isNotEmpty()) {
                                         mapView.clear()
                                         
-                                        if (points.size >= 2) {
+                                        if (pathPoints.size >= 2) {
                                             val polyline = Polyline(
-                                                points = points,
+                                                points = pathPoints,
                                                 strokeColor = Color.Cyan,
                                                 strokeWidth = 12f
                                             )
@@ -349,9 +365,7 @@ fun RideDetailSuccessContent(
                                             }
                                         }
                                         
-                                        if (mapView.tag != "initialized" && currentRide.pathPoints.isNotEmpty()) {
-                                            val avgLat = currentRide.pathPoints.asSequence().map { it.latitude }.average()
-                                            val avgLng = currentRide.pathPoints.asSequence().map { it.longitude }.average()
+                                        if (mapView.tag != "initialized" && pathPoints.isNotEmpty()) {
                                             mapView.setCenter(LatLng(avgLat, avgLng))
                                             mapView.setZoom(14f)
                                             mapView.tag = "initialized"
@@ -363,7 +377,7 @@ fun RideDetailSuccessContent(
                     }
                 }
 
-                item {
+                item(contentType = "Time") {
                     Text(
                         text = rideData.time,
                         style = MaterialTheme.typography.bodyMedium,
@@ -371,7 +385,7 @@ fun RideDetailSuccessContent(
                     )
                 }
 
-                item {
+                item(contentType = "ReplayButton") {
                     val isOffline = networkStatus != ConnectivityObserver.Status.Available
                     Button(
                         onClick = {
@@ -428,7 +442,7 @@ fun RideDetailSuccessContent(
                     }
                 }
 
-                item {
+                item(contentType = "Telemetry") {
                     SectionHeader("TELEMETRY SUMMARY")
                     Spacer(Modifier.height(16.dp))
                     FlowRow(
@@ -437,43 +451,43 @@ fun RideDetailSuccessContent(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         TelemetryCard(
-                            modifier = Modifier.widthIn(min = 160.dp),
                             icon = Icons.Default.Straighten,
                             label = "DISTANCE",
                             value = rideData.distance.split(" ")[0],
-                            unit = if (useMetric) "km" else "mi"
+                            unit = if (useMetric) "km" else "mi",
+                            modifier = Modifier.widthIn(min = 160.dp)
                         )
                         TelemetryCard(
-                            modifier = Modifier.widthIn(min = 160.dp),
                             icon = Icons.Default.Timer,
                             label = "MOVING TIME",
                             value = rideData.duration,
-                            unit = ""
+                            unit = "",
+                            modifier = Modifier.widthIn(min = 160.dp)
                         )
                         TelemetryCard(
-                            modifier = Modifier.widthIn(min = 160.dp),
                             icon = Icons.Default.Speed,
                             label = "AVG SPEED",
                             value = rideData.avgSpeed.split(" ")[0],
-                            unit = if (useMetric) "km/h" else "mph"
+                            unit = if (useMetric) "km/h" else "mph",
+                            modifier = Modifier.widthIn(min = 160.dp)
                         )
                         TelemetryCard(
-                            modifier = Modifier.widthIn(min = 160.dp),
                             icon = Icons.Default.ElectricBolt,
                             label = "MAX SPEED",
                             value = "%.1f".format(if (useMetric) currentRide.maxSpeedKmh else currentRide.maxSpeedKmh * 0.621371f),
-                            unit = if (useMetric) "km/h" else "mph"
+                            unit = if (useMetric) "km/h" else "mph",
+                            modifier = Modifier.widthIn(min = 160.dp)
                         )
                     }
                 }
 
-                item {
+                item(contentType = "Splits") {
                     SectionHeader("KILOMETER SPLITS")
                     Spacer(Modifier.height(16.dp))
                     KilometerSplitsSection()
                 }
 
-                item {
+                item(contentType = "PhotosHeader") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -518,7 +532,11 @@ fun RideDetailSuccessContent(
                     }
                     Spacer(Modifier.height(12.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(currentRide.photos.size) { index ->
+                        items(
+                            count = currentRide.photos.size,
+                            key = { currentRide.photos[it].uri },
+                            contentType = { "Photo" }
+                        ) { index ->
                             val photo = currentRide.photos[index]
                             PhotoCard(
                                 photo = photo,
@@ -526,7 +544,7 @@ fun RideDetailSuccessContent(
                                 onClick = { fullScreenPhotoUri = photo.uri }
                             )
                         }
-                        item {
+                        item(contentType = "AddPhotoPlaceholder") {
                             AddPhotoPlaceholder(onClick = { 
                                 val hasLocationPerm = ContextCompat.checkSelfPermission(
                                     context, 
@@ -555,12 +573,12 @@ fun RideDetailSuccessContent(
                     }
                 }
 
-                item {
+                item(contentType = "Notes") {
                     SectionHeader("RIDER NOTES")
                     Spacer(Modifier.height(16.dp))
                     
-                    var isEditingNotes by remember { mutableStateOf(false) }
-                    var noteText by remember(currentRide.notes) { mutableStateOf(currentRide.notes) }
+                    var isEditingNotes by rememberSaveable { mutableStateOf(false) }
+                    var noteText by rememberSaveable(currentRide.notes) { mutableStateOf(currentRide.notes) }
                     
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -612,7 +630,7 @@ fun RideDetailSuccessContent(
                             },
                             confirmButton = {
                                 TextButton(onClick = {
-                                    viewModel.updateNotes(noteText)
+                                    onUpdateNotes(noteText)
                                     isEditingNotes = false
                                 }) {
                                     Text("Save")
@@ -637,8 +655,9 @@ fun RideDetailSuccessContent(
             exit = fadeOut()
         ) {
             fullScreenPhotoUri?.let { uri ->
-                var scale by remember { mutableFloatStateOf(1f) }
-                var offset by remember { mutableStateOf(Offset.Zero) }
+                var scale by rememberSaveable { mutableFloatStateOf(1f) }
+                var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
+                var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
                 val swipeOffsetY = remember { Animatable(0f) }
                 val coroutineScope = rememberCoroutineScope()
 
@@ -656,7 +675,8 @@ fun RideDetailSuccessContent(
                                 onTap = { fullScreenPhotoUri = null },
                                 onDoubleTap = {
                                     scale = if (scale > 1f) 1f else 3f
-                                    offset = Offset.Zero
+                                    offsetX = 0f
+                                    offsetY = 0f
                                     coroutineScope.launch { swipeOffsetY.animateTo(0f) }
                                 }
                             )
@@ -671,9 +691,10 @@ fun RideDetailSuccessContent(
                                     val zoom = event.calculateZoom()
                                     val pan = event.calculatePan()
                                     
-                                    if (scale > 1f || zoom != 1f) {
+                                    if ((scale > 1f || zoom != 1f)) {
                                         scale = (scale * zoom).coerceIn(1f, 5f)
-                                        offset += pan
+                                        offsetX += pan.x
+                                        offsetY += pan.y
                                         // Reset swipe if we start zooming
                                         coroutineScope.launch { swipeOffsetY.snapTo(0f) }
                                     } else {
@@ -707,8 +728,8 @@ fun RideDetailSuccessContent(
                             .graphicsLayer(
                                 scaleX = scale,
                                 scaleY = scale,
-                                translationX = offset.x,
-                                translationY = offset.y + swipeOffsetY.value
+                                translationX = offsetX,
+                                translationY = offsetY + swipeOffsetY.value
                             ),
                         contentScale = androidx.compose.ui.layout.ContentScale.Fit
                     )
@@ -760,7 +781,7 @@ fun RideDetailSuccessContent(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.deleteRide()
+                            onDeleteRide()
                             showDeleteRideDialog = false
                             onBack()
                         },
@@ -792,7 +813,7 @@ fun RideDetailSuccessContent(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        viewModel.updateTitle(titleText)
+                        onUpdateTitle(titleText)
                         showEditTitleDialog = false
                     }) {
                         Text("Save")
@@ -815,7 +836,7 @@ fun RideDetailSuccessContent(
                     TextButton(
                         onClick = {
                             showDeletePhotoDialog?.let { uri ->
-                                viewModel.deletePhoto(uri)
+                                onDeletePhoto(uri)
                                 fullScreenPhotoUri = null
                             }
                             showDeletePhotoDialog = null
@@ -836,9 +857,9 @@ fun RideDetailSuccessContent(
 }
 
 @Composable
-fun KilometerSplitsSection() {
+fun KilometerSplitsSection(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
         contentAlignment = Alignment.Center
@@ -852,9 +873,10 @@ fun KilometerSplitsSection() {
 }
 
 @Composable
-fun SectionHeader(text: String) {
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
+        modifier = modifier,
         style = MaterialTheme.typography.labelLarge.copy(
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
@@ -865,11 +887,11 @@ fun SectionHeader(text: String) {
 
 @Composable
 fun TelemetryCard(
-    modifier: Modifier,
     icon: ImageVector,
     label: String,
     value: String,
-    unit: String
+    unit: String,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier,
@@ -947,10 +969,11 @@ fun TelemetryCard(
 fun PhotoCard(
     photo: com.example.cycleridetracker.data.RidePhoto, 
     icon: ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .size(140.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
@@ -993,10 +1016,10 @@ fun PhotoCard(
 }
 
 @Composable
-fun AddPhotoPlaceholder(onClick: () -> Unit) {
+fun AddPhotoPlaceholder(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(140.dp),
+        modifier = modifier.size(140.dp),
         shape = RoundedCornerShape(20.dp),
         color = Color.Transparent,
         border = androidx.compose.foundation.BorderStroke(1.dp, Navy700)
@@ -1019,7 +1042,7 @@ fun AddPhotoPlaceholder(onClick: () -> Unit) {
 
 @Preview(showBackground = true, heightDp = 2000)
 @Composable
-fun RideDetailPreview() {
+private fun RideDetailPreview() {
     CycleRideTrackerTheme(darkTheme = true) {
         RideDetailScreen(
             rideId = 1,

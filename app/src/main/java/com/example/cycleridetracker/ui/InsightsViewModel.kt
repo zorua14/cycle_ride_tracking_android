@@ -1,5 +1,6 @@
 package com.example.cycleridetracker.ui
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cycleridetracker.data.Ride
@@ -193,6 +194,7 @@ class InsightsViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class InsightsStats(
     val totalDistanceKmValue: String = "0.0",
     val distanceUnit: String = "km",

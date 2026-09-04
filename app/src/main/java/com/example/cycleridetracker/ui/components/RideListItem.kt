@@ -21,7 +21,7 @@ data class RideData(
     val time: String,
     val distance: String,
     val duration: String,
-    val avgSpeed: String
+    val avgSpeed: String,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -29,15 +29,16 @@ data class RideData(
 fun RecentRideCard(
     ride: RideData,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    modifier: Modifier = Modifier,
     hapticsEnabled: Boolean = true,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Card(
         onClick = {
             onClick()
             AppHaptics.performSelection(haptic, hapticsEnabled)
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = CycleRideTrackerTheme.colors.cardBackground)
     ) {

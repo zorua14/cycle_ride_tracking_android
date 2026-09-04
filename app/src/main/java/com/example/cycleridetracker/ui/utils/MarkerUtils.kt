@@ -37,8 +37,8 @@ object MarkerUtils {
             drawRoundRect(outerRect, borderRadius, borderRadius, paint)
             
             val path = Path()
-            path.moveTo(size / 2f - tailWidth / 2f, size - borderRadius)
-            path.lineTo(size / 2f + tailWidth / 2f, size - borderRadius)
+            path.moveTo((size / 2f) - (tailWidth / 2f), size - borderRadius)
+            path.lineTo((size / 2f) + (tailWidth / 2f), size - borderRadius)
             path.lineTo(size / 2f, (size + tailHeight).toFloat())
             path.close()
             drawPath(path, paint)
@@ -143,8 +143,8 @@ object MarkerUtils {
             val imageLoader = Coil.imageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(uri)
-                .size(240, 240) // Request larger for better quality after crop
-                .allowHardware(false)
+                .size(width = 240, height = 240) // Request larger for better quality after crop
+                .allowHardware(enable = false)
                 .build()
             val result = imageLoader.execute(request)
             if (result is SuccessResult) {

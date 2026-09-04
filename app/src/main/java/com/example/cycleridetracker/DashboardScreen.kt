@@ -31,9 +31,14 @@ import com.example.cycleridetracker.ui.DashboardStats
 import com.example.cycleridetracker.ui.DashboardUiState
 import com.example.cycleridetracker.ui.utils.ConnectivityObserver
 import androidx.compose.animation.*
+import androidx.compose.runtime.Immutable
+
+@Immutable
+data class RideList(val rides: List<Ride>)
 
 @Composable
 fun DashboardContent(
+    modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     onRideClick: (Ride) -> Unit = {},
     onReplayLatest: (Ride) -> Unit = {},
@@ -65,7 +70,8 @@ fun DashboardContent(
                     onViewAllClick = onViewAllClick,
                     networkStatus = networkStatus,
                     hapticsEnabled = hapticsEnabled,
-                    haptic = haptic
+                    haptic = haptic,
+                    modifier = modifier,
                 )
             }
         }
@@ -81,20 +87,21 @@ fun DashboardSuccessContent(
     onViewAllClick: () -> Unit,
     networkStatus: ConnectivityObserver.Status,
     hapticsEnabled: Boolean,
-    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        item {
+        item(contentType = "WeeklyProgress") {
             WeeklyProgressSection(state.stats)
         }
 
-        item {
+        item(contentType = "RecentRides") {
             RecentRidesSection(
-                rides = state.recentRides.take(4),
+                rideList = RideList(state.recentRides.take(4)),
                 useMetric = state.useMetric,
                 hapticsEnabled = hapticsEnabled,
                 haptic = haptic,
@@ -107,7 +114,7 @@ fun DashboardSuccessContent(
         }
 
         if (state.recentRides.isNotEmpty()) {
-            item {
+            item(contentType = "ViewAllButton") {
                 Button(
                     onClick = {
                         AppHaptics.performAction(haptic, hapticsEnabled)
@@ -135,9 +142,12 @@ fun DashboardSuccessContent(
 }
 
 @Composable
-fun DashboardLoadingPlaceholder(contentPadding: PaddingValues) {
+fun DashboardLoadingPlaceholder(
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(contentPadding),
         verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -167,8 +177,11 @@ fun DashboardLoadingPlaceholder(contentPadding: PaddingValues) {
 // DashboardHeader is now handled by MainActivity's TopAppBar
 
 @Composable
-fun WeeklyProgressSection(stats: DashboardStats) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+fun WeeklyProgressSection(stats: DashboardStats, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -249,11 +262,11 @@ fun StreakIcon(modifier: Modifier = Modifier) {
 
 @Composable
 fun ProgressMetricCard(
-    modifier: Modifier,
     icon: ImageVector,
     label: String,
     value: String,
-    unit: String
+    unit: String,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier,
@@ -294,15 +307,19 @@ fun ProgressMetricCard(
 
 @Composable
 fun RecentRidesSection(
-    rides: List<Ride>,
+    rideList: RideList,
     useMetric: Boolean,
     hapticsEnabled: Boolean,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     onRideClick: (Ride) -> Unit,
     onReplayLatest: () -> Unit,
+    modifier: Modifier = Modifier,
     isOffline: Boolean = false
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -342,7 +359,7 @@ fun RecentRidesSection(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            rides.forEach { ride ->
+            rideList.rides.forEach { ride ->
                 RecentRideCard(
                     ride = ride.toRideData(useMetric),
                     haptic = haptic,
@@ -355,7 +372,7 @@ fun RecentRidesSection(
 
 @Preview(showBackground = true)
 @Composable
-fun DashboardPreview() {
+private fun DashboardPreview() {
     CycleRideTrackerTheme(darkTheme = true) {
         DashboardContent()
     }

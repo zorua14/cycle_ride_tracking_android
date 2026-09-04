@@ -7,8 +7,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -33,9 +33,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
+
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import com.example.cycleridetracker.data.ThemePrefs
 import com.example.cycleridetracker.ui.haptics.AppHaptics
 import com.example.cycleridetracker.ui.theme.CycleRideTrackerTheme
@@ -78,7 +77,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val context = LocalContext.current
+
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val themeMode by settingsViewModel.theme.collectAsStateWithLifecycle()
 
@@ -94,7 +93,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = isDarkTheme,
                 dynamicColor = useDynamicColor,
             ) {
-                MainApp()
+                MainApp(settingsViewModel = settingsViewModel)
             }
         }
     }
@@ -103,20 +102,22 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MainApp(
-    settingsViewModel: SettingsViewModel = hiltViewModel()
+    modifier: Modifier = Modifier,
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    activeRideViewModel: ActiveRideViewModel = hiltViewModel(),
+    historyViewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val hapticsEnabled by settingsViewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val useMetric by settingsViewModel.useMetric.collectAsStateWithLifecycle()
     
-    val activeRideViewModel: ActiveRideViewModel = hiltViewModel()
     val activeState by activeRideViewModel.activeRideState.collectAsStateWithLifecycle()
     val isRideActive = activeState is ActiveRideState.Tracking
 
     val connectivityObserver = remember { NetworkConnectivityObserver(context) }
-    val networkStatus by connectivityObserver.observe().collectAsState(
-        initial = ConnectivityObserver.Status.Available
+    val networkStatus by connectivityObserver.observe().collectAsStateWithLifecycle(
+        initialValue = ConnectivityObserver.Status.Available
     )
 
     // Auto-resume service if ride is active in repository (recovered from DB)
@@ -201,8 +202,7 @@ fun MainApp(
     var toolbarHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
 
-    val historyViewModel: HistoryViewModel = hiltViewModel()
-    var showSortFilterSheet by remember { mutableStateOf(false) }
+    var showSortFilterSheet by remember { mutableStateOf(value = false) }
 
     val toolbarContent: @Composable RowScope.() -> Unit = {
         val items = listOf("Dashboard", "History", "Insights", "Settings")
@@ -246,11 +246,12 @@ fun MainApp(
         }
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(floatingToolbarScrollBehavior)
-            .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
+    Box(modifier = modifier) {
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(floatingToolbarScrollBehavior)
+                .nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
         topBar = {
             // Header is handled per-screen for seamless transitions
         },
@@ -275,9 +276,8 @@ fun MainApp(
                                 onClick = {
                                     AppHaptics.performAction(haptic, hapticsEnabled)
                                     previousScreen = currentScreen
-                                    
-                                    val locationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                                                          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                    val locationGranted = (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                                                          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
                                     
                                     if (locationGranted) {
                                         checkLocationAndNavigate()
@@ -401,7 +401,7 @@ fun MainApp(
                             onViewAllClick = {
                                 currentScreen = "History"
                             },
-                            networkStatus = networkStatus
+                            networkStatus = networkStatus,
                         )
                         "RideDetail" -> selectedRide?.let { ride ->
                             RideDetailScreen(
@@ -428,16 +428,22 @@ fun MainApp(
                                 }
                             )
                         }
-                        "History" -> HistoryContent(
-                            contentPadding = contentPadding,
-                            onRideClick = { ride ->
-                                selectedRide = ride
-                                previousScreen = "History"
-                                currentScreen = "RideDetail"
-                            },
-                            viewModel = historyViewModel
-                        )
-                        "Insights" -> InsightsContent(contentPadding)
+                        "History" -> {
+                            val historyUiState by historyViewModel.uiState.collectAsStateWithLifecycle()
+                            val hapticsEnabledForHistory by historyViewModel.hapticsEnabled.collectAsStateWithLifecycle()
+                            HistoryContent(
+                                uiState = historyUiState,
+                                hapticsEnabled = hapticsEnabledForHistory,
+                                onSearchQueryChange = { historyViewModel.onSearchQueryChange(it) },
+                                contentPadding = contentPadding,
+                                onRideClick = { ride ->
+                                    selectedRide = ride
+                                    previousScreen = "History"
+                                    currentScreen = "RideDetail"
+                                },
+                            )
+                        }
+                        "Insights" -> InsightsContent(contentPadding = contentPadding)
                         "Settings" -> SettingsContent(contentPadding = contentPadding)
                         else -> Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
                             Text("Coming Soon: $screen", color = CycleRideTrackerTheme.colors.onSurface)
@@ -447,7 +453,7 @@ fun MainApp(
             }
 
             ActiveRideIndicator(
-                viewModel = activeRideViewModel,
+                activeRideState = activeState,
                 isVisible = currentScreen !in listOf("Settings"),
                 onClick = {
                     showActiveRideSheet = true
@@ -476,10 +482,12 @@ fun MainApp(
             title = { Text("Location Disabled") },
             text = { Text("To track your ride, please enable device location in your system settings.") },
             confirmButton = {
-                TextButton(onClick = {
-                    showLocationOffDialog = false
-                    context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                }) {
+                TextButton(
+                    onClick = {
+                        showLocationOffDialog = false
+                        context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    }
+                ) {
                     Text("Settings")
                 }
             },
@@ -594,4 +602,5 @@ fun MainApp(
             }
         }
     }
+}
 }

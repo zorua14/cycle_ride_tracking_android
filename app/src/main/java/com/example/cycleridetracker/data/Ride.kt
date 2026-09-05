@@ -3,6 +3,9 @@ package com.example.cycleridetracker.data
 import android.os.Parcelable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Ignore
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import com.google.gson.Gson
@@ -13,10 +16,32 @@ import kotlinx.parcelize.Parcelize
 data class LatLngPoint(val latitude: Double, val longitude: Double) : Parcelable
 
 @Parcelize
+@Entity(
+    tableName = "ride_path_points",
+    foreignKeys = [
+        ForeignKey(
+            entity = Ride::class,
+            parentColumns = ["id"],
+            childColumns = ["rideId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("rideId")]
+)
+data class RidePathPoint(
+    @PrimaryKey(autoGenerate = true) val pointId: Int = 0,
+    val rideId: Int,
+    val latitude: Double,
+    val longitude: Double,
+    val timestamp: Long
+) : Parcelable
+
+@Parcelize
 data class RidePhoto(
     val uri: String,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val timestamp: Long = 0L
 ) : Parcelable
 
 @Parcelize
@@ -29,11 +54,36 @@ data class Ride(
     val distanceMeters: Float,
     val averageSpeedKmh: Float,
     val maxSpeedKmh: Float,
-    val pathPoints: List<LatLngPoint>,
+    @Ignore val pathPoints: List<LatLngPoint> = emptyList(),
     @ColumnInfo(defaultValue = "[]") val photos: List<RidePhoto> = emptyList(),
     @ColumnInfo(defaultValue = "''") val notes: String = "",
     @ColumnInfo(defaultValue = "0") val isFinished: Boolean = false
 ) : Parcelable {
+
+    constructor(
+        id: Int,
+        title: String,
+        startTimeMillis: Long,
+        endTimeMillis: Long,
+        distanceMeters: Float,
+        averageSpeedKmh: Float,
+        maxSpeedKmh: Float,
+        photos: List<RidePhoto>,
+        notes: String,
+        isFinished: Boolean
+    ) : this(
+        id = id,
+        title = title,
+        startTimeMillis = startTimeMillis,
+        endTimeMillis = endTimeMillis,
+        distanceMeters = distanceMeters,
+        averageSpeedKmh = averageSpeedKmh,
+        maxSpeedKmh = maxSpeedKmh,
+        pathPoints = emptyList(),
+        photos = photos,
+        notes = notes,
+        isFinished = isFinished
+    )
     fun toRideData(useMetric: Boolean = true): com.example.cycleridetracker.ui.components.RideData {
         val date = java.text.SimpleDateFormat("EEE, MMM d • h:mm a", java.util.Locale.getDefault())
             .format(java.util.Date(startTimeMillis))

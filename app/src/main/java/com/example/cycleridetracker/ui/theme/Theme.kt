@@ -43,55 +43,85 @@ object CycleRideTrackerTheme {
 }
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Cyan400,
-    onPrimary = Navy900,
-    secondary = Cyan200,
-    onSecondary = Navy900,
-    tertiary = Gray400,
-    onTertiary = White,
-    background = Navy900,
-    surface = Navy900,
+    primary = White,
+    onPrimary = Black,
+
+    secondary = Color(0xFFD1D1D1),
+    onSecondary = Black,
+
+    tertiary = Color(0xFF9E9E9E),
+    onTertiary = Black,
+
+    // True black background
+    background = Black,
+
+    // Slightly raised surface
+    surface = Color(0xFF121212),
+
     onBackground = White,
     onSurface = White,
-    surfaceVariant = Navy800,
-    onSurfaceVariant = Gray400,
-    outline = Navy700
+
+    // Card / secondary surface
+    surfaceVariant = Color(0xFF1E1E1E),
+    onSurfaceVariant = Color(0xFFB8B8B8),
+
+    outline = Color(0xFF3D3D3D)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Navy900,
+    primary = Black,
     onPrimary = White,
-    secondary = Navy700,
+
+    secondary = Color(0xFF2C2C2C),
     onSecondary = White,
-    tertiary = Gray400,
-    onTertiary = Navy900,
-    background = White,
+
+    tertiary = Color(0xFF2C2C2C),
+    onTertiary = White,
+
+    // Noticeably gray background
+    background = Color(0xFFE5E5E5),
+
+    // Cards remain white
     surface = White,
-    onBackground = Navy900,
-    onSurface = Navy900
+
+    onBackground = Color(0xFF111111),
+    onSurface = Color(0xFF111111),
+
+    // Slightly darker gray for secondary surfaces
+    surfaceVariant = Color(0xFFDADADA),
+    onSurfaceVariant = Color(0xFF666666),
+
+    outline = Color(0xFFC2C2C2)
 )
 
 @Composable
 fun CycleRideTrackerTheme(
     modifier: Modifier = Modifier,
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val baseColorScheme = when {
-        (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) -> {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+
+            if (darkTheme) {
+                dynamicDarkColorScheme(context)
+            } else {
+                dynamicLightColorScheme(context)
+            }
         }
+
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
 
     val view = LocalView.current
+
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
+
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = !darkTheme
                 isAppearanceLightNavigationBars = !darkTheme
@@ -105,12 +135,19 @@ fun CycleRideTrackerTheme(
         surface = baseColorScheme.surface,
         onSurface = baseColorScheme.onSurface,
         onSurfaceVariant = baseColorScheme.onSurfaceVariant,
-        largeTitle = if (darkTheme) Cyan400 else Navy900,
+
+        // No more Cyan400 / Navy900
+        largeTitle = baseColorScheme.primary,
+
         outline = baseColorScheme.outline,
-        cardBackground = if (darkTheme) Navy800 else Color.LightGray.copy(alpha = 0.1f)
+
+        // Uses the theme's surface hierarchy
+        cardBackground = baseColorScheme.surfaceVariant
     )
 
-    CompositionLocalProvider(LocalAppColors provides appColors) {
+    CompositionLocalProvider(
+        LocalAppColors provides appColors
+    ) {
         Box(modifier = modifier) {
             MaterialTheme(
                 colorScheme = baseColorScheme,

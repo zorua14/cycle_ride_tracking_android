@@ -17,13 +17,14 @@ class RideRepository @Inject constructor(
         repositoryScope.launch {
             val activeRide = rideDao.getActiveRide()
             activeRide?.let {
+                val points = rideDao.getPathPointsForRide(it.id).map { p -> LatLngPoint(p.latitude, p.longitude) }
                 _activeRideState.value = ActiveRideState.Tracking(
                     rideId = it.id,
                     startTimeMillis = it.startTimeMillis,
                     durationMillis = System.currentTimeMillis() - it.startTimeMillis,
                     distanceMeters = it.distanceMeters,
                     maxSpeedKmh = it.maxSpeedKmh,
-                    pathPoints = it.pathPoints
+                    pathPoints = points
                 )
             }
         }
@@ -31,7 +32,15 @@ class RideRepository @Inject constructor(
 
     fun getAllRides(): Flow<List<Ride>> = rideDao.getAllRides()
 
-    suspend fun getRideById(id: Int): Ride? = rideDao.getRideById(id)
+    fun getRidesByTimeRange(start: Long, end: Long): Flow<List<Ride>> = rideDao.getRidesByTimeRange(start, end)
+
+    fun getOldestRideTimestamp(): Flow<Long?> = rideDao.getOldestRideTimestamp()
+
+    suspend fun getRideById(id: Int): Ride? {
+        val ride = rideDao.getRideById(id) ?: return null
+        val points = rideDao.getPathPointsForRide(id).map { LatLngPoint(it.latitude, it.longitude) }
+        return ride.copy(pathPoints = points)
+    }
 
     suspend fun insertRide(ride: Ride): Long = rideDao.insertRide(ride)
 
@@ -39,7 +48,23 @@ class RideRepository @Inject constructor(
 
     suspend fun deleteRide(id: Int) = rideDao.deleteRide(id)
 
-    suspend fun getActiveRideFromDb(): Ride? = rideDao.getActiveRide()
+    suspend fun getActiveRideFromDb(): Ride? {
+        val ride = rideDao.getActiveRide() ?: return null
+        val points = rideDao.getPathPointsForRide(ride.id).map { LatLngPoint(it.latitude, it.longitude) }
+        return ride.copy(pathPoints = points)
+    }
+
+    suspend fun insertPathPoints(rideId: Int, points: List<LatLngPoint>) {
+        val dbPoints = points.map { point ->
+            RidePathPoint(
+                rideId = rideId,
+                latitude = point.latitude,
+                longitude = point.longitude,
+                timestamp = System.currentTimeMillis()
+            )
+        }
+        rideDao.insertPathPoints(dbPoints)
+    }
 
     suspend fun deleteUnfinishedRides() = rideDao.deleteUnfinishedRides()
 

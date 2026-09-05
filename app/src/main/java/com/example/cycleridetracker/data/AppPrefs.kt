@@ -24,9 +24,6 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
     private val _samplingRate = MutableStateFlow(prefs.getLong("sampling_rate", 1000L))
     val samplingRate: StateFlow<Long> = _samplingRate
 
-    private val _persistenceInterval = MutableStateFlow(prefs.getLong("persistence_interval", 60000L))
-    val persistenceInterval: StateFlow<Long> = _persistenceInterval
-
     private val _weeklyGoal = MutableStateFlow(prefs.getFloat("weekly_goal", 50f))
     val weeklyGoal: StateFlow<Float> = _weeklyGoal
 
@@ -51,11 +48,6 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
     fun setSamplingRate(rateMillis: Long) {
         prefs.edit().putLong("sampling_rate", rateMillis).apply()
         _samplingRate.value = rateMillis
-    }
-
-    fun setPersistenceInterval(intervalMillis: Long) {
-        prefs.edit().putLong("persistence_interval", intervalMillis).apply()
-        _persistenceInterval.value = intervalMillis
     }
 
     fun setWeeklyGoal(goal: Float) {

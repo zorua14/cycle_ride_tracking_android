@@ -50,8 +50,6 @@ class RideForegroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var timerJob: Job? = null
     
-    private var lastPersistenceTime = 0L
-    
     companion object {
         const val CHANNEL_ID = "ride_tracking_channel"
         const val NOTIFICATION_ID = 1
@@ -126,11 +124,12 @@ class RideForegroundService : Service() {
             repository.updateActiveRideState(ActiveRideState.Idle)
             
             serviceScope.launch {
+                val endTime = System.currentTimeMillis()
                 val ride = Ride(
                     id = currentState.rideId,
                     title = "Cycling Ride",
                     startTimeMillis = currentState.startTimeMillis,
-                    endTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = endTime,
                     distanceMeters = currentState.distanceMeters,
                     averageSpeedKmh = if (currentState.durationMillis > 0) 
                         (currentState.distanceMeters / 1000f) / (currentState.durationMillis / 3600000f) else 0f,
@@ -139,6 +138,7 @@ class RideForegroundService : Service() {
                     isFinished = true
                 )
                 repository.updateRide(ride)
+                repository.insertPathPoints(currentState.rideId, currentState.pathPoints)
             }
         }
         
@@ -176,7 +176,6 @@ class RideForegroundService : Service() {
                 val currentState = repository.activeRideState.value
                 if (currentState is ActiveRideState.Tracking && !currentState.isPaused) {
                     result.lastLocation?.let { location ->
-                        val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
                         updateMetrics(location, currentState)
                     }
                 }
@@ -218,36 +217,6 @@ class RideForegroundService : Service() {
                 pathPoints = updatedPoints
             )
         )
-
-        // Periodic Persistence: Save to DB based on user-defined time interval
-        val currentTime = System.currentTimeMillis()
-        val interval = appPrefs.persistenceInterval.value
-        
-        if (lastPersistenceTime == 0L) {
-            lastPersistenceTime = currentTime
-        }
-
-        if (currentTime - lastPersistenceTime >= interval) {
-            lastPersistenceTime = currentTime
-            serviceScope.launch {
-                // Safety check: Don't persist if the ride was just finished or paused
-                if (repository.activeRideState.value !is ActiveRideState.Tracking) return@launch
-                
-                val ride = Ride(
-                    id = currentState.rideId,
-                    title = "Cycling Ride",
-                    startTimeMillis = currentState.startTimeMillis,
-                    endTimeMillis = currentTime,
-                    distanceMeters = totalDistance,
-                    averageSpeedKmh = if (currentState.durationMillis > 0) 
-                        (totalDistance / 1000f) / (currentState.durationMillis / 3600000f) else 0f,
-                    maxSpeedKmh = maxSpeed,
-                    pathPoints = updatedPoints,
-                    isFinished = false
-                )
-                repository.updateRide(ride)
-            }
-        }
         
         updateNotification("Distance: %.2f km".format(totalDistance / 1000f))
     }

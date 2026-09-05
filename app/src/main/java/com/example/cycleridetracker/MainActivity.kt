@@ -347,11 +347,6 @@ fun MainApp(
                             },
                             actions = {
                                 when (screen) {
-                                    "Insights" -> {
-                                        IconButton(onClick = { AppHaptics.performAction(haptic, hapticsEnabled) }) {
-                                            Icon(Icons.Default.Share, contentDescription = "Share", tint = CycleRideTrackerTheme.colors.onSurface)
-                                        }
-                                    }
                                     "History" -> {
                                         IconButton(onClick = { 
                                             showSortFilterSheet = true
@@ -421,8 +416,7 @@ fun MainApp(
                         }
                         "ReplayJourney" -> selectedRide?.let { ride ->
                             ReplayJourneyScreen(
-                                ride = ride,
-                                useMetric = useMetric,
+                                rideId = ride.id,
                                 onBack = {
                                     currentScreen = "RideDetail"
                                 }

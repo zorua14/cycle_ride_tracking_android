@@ -19,7 +19,6 @@ class SettingsViewModel @Inject constructor(
     val useMetric: StateFlow<Boolean> = appPrefs.useMetric
     val hapticsEnabled: StateFlow<Boolean> = appPrefs.hapticsEnabled
     val samplingRate: StateFlow<Long> = appPrefs.samplingRate
-    val persistenceInterval: StateFlow<Long> = appPrefs.persistenceInterval
     
     private val kmToMi = 0.621371f
 
@@ -53,10 +52,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setSamplingRate(rateMillis: Long) {
         appPrefs.setSamplingRate(rateMillis)
-    }
-
-    fun setPersistenceInterval(intervalMillis: Long) {
-        appPrefs.setPersistenceInterval(intervalMillis)
     }
 
     fun setWeeklyGoal(goal: Float) {

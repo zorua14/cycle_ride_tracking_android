@@ -12,8 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -24,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -45,10 +48,58 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.example.cycleridetracker.ui.RideDetailViewModel
+import com.example.cycleridetracker.ui.RideDetailUiState
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReplayJourneyScreen(
+    rideId: Int,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: RideDetailViewModel = hiltViewModel(),
+) {
+    LaunchedEffect(rideId) {
+        viewModel.loadRide(rideId)
+    }
+
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    AnimatedContent(
+        targetState = uiState,
+        transitionSpec = {
+            fadeIn() togetherWith fadeOut()
+        },
+        label = "ReplayJourneyTransition",
+        contentKey = { it::class },
+    ) { state ->
+        when (state) {
+            is RideDetailUiState.Loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            is RideDetailUiState.Error -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Failed to load journey data.")
+                }
+            }
+            is RideDetailUiState.Success -> {
+                ReplayJourneyContent(
+                    ride = state.ride,
+                    useMetric = state.useMetric,
+                    onBack = onBack,
+                    modifier = modifier
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ReplayJourneyScreen(
+fun ReplayJourneyContent(
     ride: Ride,
     useMetric: Boolean,
     onBack: () -> Unit,
@@ -80,6 +131,11 @@ fun ReplayJourneyScreen(
     val avgLat = remember(pathPoints) { pathPoints.asSequence().map { it.latitude }.average() }
     val avgLng = remember(pathPoints) { pathPoints.asSequence().map { it.longitude }.average() }
     
+    val sortedPhotos = remember(ride.photos) { ride.photos.sortedBy { it.timestamp } }
+    var displayedPhotoUris by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var lastActivePhotoUris by remember { mutableStateOf(listOf<String>()) }
+    var alreadyPausedUris by remember { mutableStateOf(setOf<String>()) }
+    
     var currentFrame by rememberSaveable { mutableIntStateOf(0) }
     val totalFrames = remember(pathPoints) { pathPoints.size.coerceAtLeast(1) }
     var playbackSpeed by rememberSaveable { mutableFloatStateOf(1f) }
@@ -93,6 +149,9 @@ fun ReplayJourneyScreen(
         if (currentFrame == 0) {
             mapInitialized = false
             endSnapped = false
+            displayedPhotoUris = emptyList()
+            lastActivePhotoUris = emptyList()
+            alreadyPausedUris = emptySet()
         }
     }
 
@@ -115,28 +174,35 @@ fun ReplayJourneyScreen(
                 val deltaTimeSec = (now - lastTime) / 1000.0
                 lastTime = now
 
-                // Check for photos nearby to slow down
+                // Check for new photos nearby to pause playback
                 val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
                 val currentPoint = pathPoints.getOrNull(pointIndex)
-                val isNearPhoto = currentPoint?.let { cp ->
-                    ride.photos.any { photo ->
-                        if (photo.latitude != null && photo.longitude != null) {
-                            val distanceResults = FloatArray(1)
+                val photosAtWaypoint = currentPoint?.let { cp ->
+                    sortedPhotos.filter { photo ->
+                        if (photo.latitude != null && photo.longitude != null && !alreadyPausedUris.contains(photo.uri)) {
+                            val results = FloatArray(1)
                             android.location.Location.distanceBetween(
                                 cp.latitude, cp.longitude,
                                 photo.latitude, photo.longitude,
-                                distanceResults
+                                results
                             )
-                            distanceResults[0] <= 40f // detect photo 40m ahead/around
+                            results[0] <= 30f // trigger pause within 30m
                         } else false
                     }
-                } ?: false
+                } ?: emptyList()
 
-                // If near a photo, drop to 50 FPS (slow motion) regardless of selected speed
-                // to give the user time to see the waypoint.
-                val effectiveFps = if (isNearPhoto) 50.0 else (baseFps * playbackSpeed)
-                
-                subFrame += effectiveFps * deltaTimeSec
+                if (photosAtWaypoint.isNotEmpty()) {
+                    // Mark as paused immediately to avoid re-triggering
+                    alreadyPausedUris = alreadyPausedUris + photosAtWaypoint.map { it.uri }
+                    
+                    // Pause for 3 seconds as requested
+                    delay(3000.milliseconds)
+                    
+                    // Reset lastTime so we don't have a huge jump in deltaTimeSec after the pause
+                    lastTime = android.os.SystemClock.elapsedRealtime()
+                }
+
+                subFrame += (baseFps * playbackSpeed) * deltaTimeSec
                 currentFrame = subFrame.toInt().coerceAtMost(totalFrames - 1)
                 delay(16.milliseconds)
             }
@@ -218,9 +284,40 @@ fun ReplayJourneyScreen(
                             )
                         }
                     }
-                }
-                
-                if (networkStatus == ConnectivityObserver.Status.Available) {
+                } else if (pathPoints.size < 2) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(CycleRideTrackerTheme.colors.cardBackground),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = CycleRideTrackerTheme.colors.primary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                "Not enough data points",
+                                color = CycleRideTrackerTheme.colors.onSurface,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "This journey has only one recorded point and cannot be replayed.",
+                                color = CycleRideTrackerTheme.colors.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
                     AndroidView(
                         factory = { context ->
                             de.afarber.openmapview.OpenMapView(context).apply {
@@ -297,16 +394,16 @@ fun ReplayJourneyScreen(
                     }
                 }
                 
-                // Photo Waypoint Overlay (Proximity check: 20 meters)
+                // Photo Waypoint Overlay (Proximity check: 30 meters)
                 val currentPoint = if (pathPoints.isNotEmpty()) {
                     val pointIndex = currentFrame.coerceAtMost(pathPoints.size - 1)
                     pathPoints.getOrElse(pointIndex) { pathPoints.last() }
                 } else null
 
-                val activePhoto = remember(currentPoint, ride.photos) {
+                val activePhotos = remember(currentPoint, sortedPhotos, displayedPhotoUris) {
                     currentPoint?.let { cp ->
-                        ride.photos.find { photo ->
-                            if (photo.latitude != null && photo.longitude != null) {
+                        sortedPhotos.filter { photo ->
+                            if (photo.latitude != null && photo.longitude != null && !displayedPhotoUris.contains(photo.uri)) {
                                 val results = FloatArray(1)
                                 android.location.Location.distanceBetween(
                                     cp.latitude, cp.longitude,
@@ -317,10 +414,20 @@ fun ReplayJourneyScreen(
                             } else false
                         }
                     }
+                } ?: emptyList()
+                
+                LaunchedEffect(activePhotos) {
+                    if (activePhotos.isEmpty() && lastActivePhotoUris.isNotEmpty()) {
+                        // Rider moved away from a photo location
+                        displayedPhotoUris = (displayedPhotoUris + lastActivePhotoUris).distinct()
+                        lastActivePhotoUris = emptyList()
+                    } else if (activePhotos.isNotEmpty()) {
+                        lastActivePhotoUris = (lastActivePhotoUris + activePhotos.map { it.uri }).distinct()
+                    }
                 }
 
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = activePhoto != null,
+                    visible = activePhotos.isNotEmpty(),
                     enter = slideInVertically { it } + fadeIn(),
                     exit = slideOutVertically { it } + fadeOut(),
                     modifier = Modifier
@@ -328,39 +435,75 @@ fun ReplayJourneyScreen(
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                 ) {
-                    activePhoto?.let { photo ->
+                    if (activePhotos.isNotEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(24.dp),
                             color = CycleRideTrackerTheme.colors.background.copy(alpha = 0.9f),
                             border = androidx.compose.foundation.BorderStroke(1.dp, CycleRideTrackerTheme.colors.primary.copy(alpha = 0.5f))
                         ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Card(
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.size(60.dp)
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    AsyncImage(
-                                        model = photo.uri,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
+                                    Column {
+                                        Text(
+                                            "PHOTO WAYPOINT${if (activePhotos.size > 1) "S" else ""}",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+                                            color = CycleRideTrackerTheme.colors.onSurfaceVariant
+                                        )
+                                        Text(
+                                            if (activePhotos.size > 1) "${activePhotos.size} snapshots nearby" else "Snapshot from ride",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = CycleRideTrackerTheme.colors.onSurface
+                                        )
+                                    }
+                                    if (activePhotos.size > 1) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.CompareArrows,
+                                            contentDescription = "Swipe to see more",
+                                            tint = CycleRideTrackerTheme.colors.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
-                                Spacer(Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "PHOTO WAYPOINT",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
-                                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "Snapshot from ride",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = CycleRideTrackerTheme.colors.onSurface
-                                    )
+                                
+                                Spacer(Modifier.height(12.dp))
+                                
+                                if (activePhotos.size == 1) {
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(180.dp)
+                                    ) {
+                                        AsyncImage(
+                                            model = activePhotos[0].uri,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    }
+                                } else {
+                                    androidx.compose.foundation.lazy.LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(activePhotos.size) { index ->
+                                            Card(
+                                                shape = RoundedCornerShape(12.dp),
+                                                modifier = Modifier.size(width = 240.dp, height = 180.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = activePhotos[index].uri,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -419,12 +562,19 @@ fun ReplayJourneyScreen(
                     onValueChange = {
                         if (isPlaying) isPlaying = false
                         currentFrame = it.toInt()
+                        // Reset seen photos so waypoints can trigger again if we scrub back/over them
+                        displayedPhotoUris = emptyList()
+                        lastActivePhotoUris = emptyList()
+                        alreadyPausedUris = emptySet()
                     },
                     valueRange = 0f..(totalFrames - 1).toFloat().coerceAtLeast(0f),
+                    enabled = pathPoints.size >= 2,
                     colors = SliderDefaults.colors(
                         thumbColor = CycleRideTrackerTheme.colors.primary,
                         activeTrackColor = CycleRideTrackerTheme.colors.primary,
-                        inactiveTrackColor = CycleRideTrackerTheme.colors.cardBackground
+                        inactiveTrackColor = CycleRideTrackerTheme.colors.cardBackground,
+                        disabledThumbColor = CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f),
+                        disabledActiveTrackColor = CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f)
                     )
                 )
             }
@@ -440,16 +590,20 @@ fun ReplayJourneyScreen(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        IconButton(onClick = { currentFrame = 0 }) {
-                            Icon(Icons.Default.Replay, contentDescription = "Reset", tint = CycleRideTrackerTheme.colors.onSurface)
+                        IconButton(onClick = { currentFrame = 0 }, enabled = pathPoints.size >= 2) {
+                            Icon(Icons.Default.Replay, contentDescription = "Reset", tint = if (pathPoints.size >= 2) CycleRideTrackerTheme.colors.onSurface else CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f))
                         }
-                        IconButton(onClick = { currentFrame = (currentFrame - 5).coerceAtLeast(0) }) {
-                            Icon(Icons.Default.FastRewind, contentDescription = "Back", tint = CycleRideTrackerTheme.colors.onSurface)
+                        IconButton(onClick = { currentFrame = (currentFrame - 5).coerceAtLeast(0) }, enabled = pathPoints.size >= 2) {
+                            Icon(Icons.Default.FastRewind, contentDescription = "Back", tint = if (pathPoints.size >= 2) CycleRideTrackerTheme.colors.onSurface else CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f))
                         }
                         FloatingActionButton(
-                            onClick = { isPlaying = !isPlaying },
-                            containerColor = CycleRideTrackerTheme.colors.primary,
-                            contentColor = CycleRideTrackerTheme.colors.background,
+                            onClick = { 
+                                if (pathPoints.size >= 2) {
+                                    isPlaying = !isPlaying
+                                }
+                            },
+                            containerColor = if (pathPoints.size >= 2) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.outline,
+                            contentColor = if (pathPoints.size >= 2) CycleRideTrackerTheme.colors.background else CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f),
                             shape = CircleShape,
                             modifier = Modifier.size(64.dp)
                         ) {
@@ -459,8 +613,8 @@ fun ReplayJourneyScreen(
                                 modifier = Modifier.size(32.dp)
                             )
                         }
-                        IconButton(onClick = { currentFrame = (currentFrame + 5).coerceAtMost(totalFrames - 1) }) {
-                            Icon(Icons.Default.FastForward, contentDescription = "Forward", tint = CycleRideTrackerTheme.colors.onSurface)
+                        IconButton(onClick = { currentFrame = (currentFrame + 5).coerceAtMost(totalFrames - 1) }, enabled = pathPoints.size >= 2) {
+                            Icon(Icons.Default.FastForward, contentDescription = "Forward", tint = if (pathPoints.size >= 2) CycleRideTrackerTheme.colors.onSurface else CycleRideTrackerTheme.colors.onSurfaceVariant.copy(alpha = 0.38f))
                         }
                         Surface(
                             shape = CircleShape,
@@ -509,6 +663,7 @@ fun ReplayJourneyScreen(
 
                                     ToggleButton(
                                         checked = isSelected,
+                                        enabled = pathPoints.size >= 2,
                                         onCheckedChange = { checked ->
                                             if (checked) {
                                                 playbackSpeed = speed
@@ -633,7 +788,7 @@ private fun ReplayJourneyPreview() {
         photos = emptyList()
     )
     CycleRideTrackerTheme(darkTheme = true) {
-        ReplayJourneyScreen(
+        ReplayJourneyContent(
             ride = mockRide,
             useMetric = true,
             onBack = {}

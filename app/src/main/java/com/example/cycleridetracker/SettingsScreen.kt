@@ -39,12 +39,10 @@ fun SettingsContent(
     val useMetric by viewModel.useMetric.collectAsStateWithLifecycle()
     val hapticsEnabled by viewModel.hapticsEnabled.collectAsStateWithLifecycle()
     val samplingRate by viewModel.samplingRate.collectAsStateWithLifecycle()
-    val persistenceInterval by viewModel.persistenceInterval.collectAsStateWithLifecycle()
     val weeklyGoal by viewModel.weeklyGoal.collectAsStateWithLifecycle()
     val monthlyGoal by viewModel.monthlyGoal.collectAsStateWithLifecycle()
 
     var showSamplingDialog by remember { mutableStateOf(value = false) }
-    var showPersistenceDialog by remember { mutableStateOf(value = false) }
     var showWeeklyGoalDialog by remember { mutableStateOf(value = false) }
     var showMonthlyGoalDialog by remember { mutableStateOf(value = false) }
 
@@ -71,10 +69,8 @@ fun SettingsContent(
                 SettingsSectionTitle("RECORDING ENGINE")
                 RecordingEngineSection(
                     samplingRate = samplingRate,
-                    persistenceInterval = persistenceInterval,
                     hapticsEnabled = hapticsEnabled,
                     onSamplingRateClick = { showSamplingDialog = true },
-                    onPersistenceIntervalClick = { showPersistenceDialog = true },
                     onHapticsToggle = { viewModel.setHapticsEnabled(it) }
                 )
             }
@@ -98,17 +94,6 @@ fun SettingsContent(
                 onSelect = {
                     viewModel.setSamplingRate(it)
                     showSamplingDialog = false
-                }
-            )
-        }
-
-        if (showPersistenceDialog) {
-            PersistenceIntervalDialog(
-                currentInterval = persistenceInterval,
-                onDismiss = { showPersistenceDialog = false },
-                onSelect = {
-                    viewModel.setPersistenceInterval(it)
-                    showPersistenceDialog = false
                 }
             )
         }
@@ -297,10 +282,8 @@ fun ConnectedThemeSelector(
 @Composable
 fun RecordingEngineSection(
     samplingRate: Long,
-    persistenceInterval: Long,
     hapticsEnabled: Boolean,
     onSamplingRateClick: () -> Unit,
-    onPersistenceIntervalClick: () -> Unit,
     onHapticsToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -342,40 +325,6 @@ fun RecordingEngineSection(
             ) {
                 Text(
                     "GPS Sampling Rate",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = CycleRideTrackerTheme.colors.onSurface
-                )
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onPersistenceIntervalClick,
-            colors = CardDefaults.cardColors(
-                containerColor = CycleRideTrackerTheme.colors.cardBackground
-            ),
-            shape = RoundedCornerShape(4.dp)
-        ) {
-            ListItem(
-                supportingContent = {
-                    val minutes = persistenceInterval / 60000
-                    Text(
-                        if (minutes < 1) "Every ${persistenceInterval / 1000} seconds" else "Every $minutes minutes",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = CycleRideTrackerTheme.colors.onSurfaceVariant
-                    )
-                },
-                trailingContent = {
-                    Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = "Select",
-                        tint = CycleRideTrackerTheme.colors.onSurfaceVariant
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-            ) {
-                Text(
-                    "Database Sync Frequency",
                     style = MaterialTheme.typography.titleMedium,
                     color = CycleRideTrackerTheme.colors.onSurface
                 )
@@ -552,81 +501,6 @@ fun SamplingRateDialog(
                             modifier = Modifier.weight(1f),
                             selected = rate == currentRate,
                             onClick = { onSelect(rate) },
-                            label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = CycleRideTrackerTheme.colors.primary,
-                                selectedLabelColor = CycleRideTrackerTheme.colors.background
-                            )
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun PersistenceIntervalDialog(
-    currentInterval: Long,
-    onDismiss: () -> Unit,
-    onSelect: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val options = listOf(
-        60000L to "1 min",
-        300000L to "5 mins",
-        600000L to "10 mins",
-        900000L to "15 mins",
-        1800000L to "30 mins"
-    )
-
-    AlertDialog(
-        modifier = modifier,
-        onDismissRequest = onDismiss,
-        title = { Text("Database Sync Frequency") },
-        text = {
-            Column {
-                Text(
-                    "Choose how often tracking data is saved. Frequent saves protect data; longer intervals save battery.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(bottom = 20.dp)
-                )
-                
-                // First Row: 3 items
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.take(3).forEach { (interval, label) ->
-                        FilterChip(
-                            modifier = Modifier.weight(1f),
-                            selected = interval == currentInterval,
-                            onClick = { onSelect(interval) },
-                            label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = CycleRideTrackerTheme.colors.primary,
-                                selectedLabelColor = CycleRideTrackerTheme.colors.background
-                            )
-                        )
-                    }
-                }
-                
-                Spacer(Modifier.height(8.dp))
-                
-                // Second Row: 2 items
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    options.drop(3).forEach { (interval, label) ->
-                        FilterChip(
-                            modifier = Modifier.weight(1f),
-                            selected = interval == currentInterval,
-                            onClick = { onSelect(interval) },
                             label = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(label) } },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = CycleRideTrackerTheme.colors.primary,

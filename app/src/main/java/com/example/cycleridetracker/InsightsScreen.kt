@@ -31,12 +31,8 @@ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLabelCompone
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.compose.cartesian.data.ColumnCartesianLayerModel
-import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
 import com.patrykandpatrick.vico.compose.cartesian.layer.ColumnCartesianLayer
-import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
-import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
-import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerVisibilityListener
 import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
@@ -90,6 +86,8 @@ fun InsightsContent(
                     state = state,
                     contentPadding = contentPadding,
                     onRangeSelect = { viewModel.selectRange(it) },
+                    onNextMonth = { viewModel.nextMonth() },
+                    onPreviousMonth = { viewModel.previousMonth() },
                     haptic = haptic,
                     modifier = modifier,
                 )
@@ -103,6 +101,8 @@ fun InsightsSuccessContent(
     state: InsightsUiState.Success,
     contentPadding: PaddingValues,
     onRangeSelect: (String) -> Unit,
+    onNextMonth: () -> Unit,
+    onPreviousMonth: () -> Unit,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
     modifier: Modifier = Modifier,
 ) {
@@ -129,7 +129,12 @@ fun InsightsSuccessContent(
 
         item(contentType = "DistanceVisualization") {
             InsightsSectionTitle(title = "DISTANCE VISUALIZATION")
-            DistanceVisualizationCard(selectedRange = state.selectedRange, stats = state.stats)
+            DistanceVisualizationCard(
+                selectedRange = state.selectedRange,
+                stats = state.stats,
+                onNextMonth = onNextMonth,
+                onPreviousMonth = onPreviousMonth
+            )
         }
 
         item(contentType = "PerformanceMetrics") {
@@ -184,8 +189,8 @@ fun TimeRangeSelector(
     onRangeSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val options = listOf("Week", "Month", "All Time")
-    val icons = listOf(Icons.Default.ViewWeek, Icons.Default.CalendarMonth, Icons.Default.AllInclusive)
+    val options = listOf("Week", "Month")
+    val icons = listOf(Icons.Default.ViewWeek, Icons.Default.CalendarMonth)
 
     SingleChoiceSegmentedButtonRow(
         modifier = modifier.fillMaxWidth()
@@ -297,6 +302,8 @@ fun GoalProgressCard(
 fun DistanceVisualizationCard(
     selectedRange: String,
     stats: InsightsStats,
+    onNextMonth: () -> Unit,
+    onPreviousMonth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -328,14 +335,47 @@ fun DistanceVisualizationCard(
                 }
             }
 
+            if (selectedRange == "Month") {
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onPreviousMonth,
+                        enabled = stats.canNavigatePrevious
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Previous Month",
+                            tint = if (stats.canNavigatePrevious) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.outline
+                        )
+                    }
+                    Text(
+                        text = stats.displayMonth,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = CycleRideTrackerTheme.colors.onSurface
+                    )
+                    IconButton(
+                        onClick = onNextMonth,
+                        enabled = stats.canNavigateNext
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Next Month",
+                            tint = if (stats.canNavigateNext) CycleRideTrackerTheme.colors.primary else CycleRideTrackerTheme.colors.outline
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
 
             Crossfade(targetState = selectedRange, label = "ChartTransition") { range ->
                 val chartData = ChartData(stats.chartData, stats.chartLabels)
-                if (range == "Week") {
-                    BarChart(chartData)
-                } else {
-                    LineChart(chartData)
+                when (range) {
+                    "Week", "Month" -> BarChart(chartData)
                 }
             }
         }
@@ -415,82 +455,6 @@ fun BarChart(
                             fill = Fill(colors.primary),
                             thickness = 12.dp,
                             shape = RoundedCornerShape(4.dp)
-                        )
-                    )
-                ),
-                startAxis = VerticalAxis.rememberStart(
-                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                    line = null,
-                    tick = null,
-                    guideline = rememberLineComponent(fill = Fill(colors.outline.copy(alpha = 0.2f)))
-                ),
-                bottomAxis = HorizontalAxis.rememberBottom(
-                    label = rememberAxisLabelComponent(style = TextStyle(color = colors.onSurfaceVariant)),
-                    line = null,
-                    tick = null,
-                    valueFormatter = bottomAxisValueFormatter
-                ),
-                marker = rememberDefaultCartesianMarker(
-                    label = rememberTextComponent(
-                        style = TextStyle(color = MaterialTheme.colorScheme.onPrimary),
-                        background = rememberShapeComponent(fill = Fill(colors.primary), shape = RoundedCornerShape(4.dp))
-                    )
-                ),
-                markerVisibilityListener = rememberMarkerHapticListener(
-                lastX = lastX,
-                onLastXChange = { lastX = it }
-            )
-            ),
-            model = model,
-            scrollState = rememberVicoScrollState(),
-            modifier = modifier
-                .fillMaxWidth()
-                .height(200.dp)
-        )
-    }
-}
-
-@Composable
-fun LineChart(
-    chartData: ChartData,
-    modifier: Modifier = Modifier,
-) {
-    val data = chartData.data
-    val labels = chartData.labels
-    var lastX by remember { mutableStateOf<Double?>(null) }
-    if (data.isEmpty() || data.all { it == 0f }) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "No data available for this period",
-                style = MaterialTheme.typography.bodyMedium,
-                color = CycleRideTrackerTheme.colors.onSurfaceVariant
-            )
-        }
-    } else {
-        val model = remember(data) {
-            CartesianChartModel(
-                LineCartesianLayerModel.build { series(data) }
-            )
-        }
-
-        val bottomAxisValueFormatter = CartesianValueFormatter { _, value, _ ->
-            labels.getOrNull(value.toInt()) ?: ""
-        }
-
-        val colors = CycleRideTrackerTheme.colors
-
-        CartesianChartHost(
-            chart = rememberCartesianChart(
-                rememberLineCartesianLayer(
-                    lineProvider = LineCartesianLayer.LineProvider.series(
-                        LineCartesianLayer.rememberLine(
-                            fill = LineCartesianLayer.LineFill.single(Fill(colors.primary)),
-                            areaFill = LineCartesianLayer.AreaFill.single(Fill(colors.primary.copy(alpha = 0.2f)))
                         )
                     )
                 ),

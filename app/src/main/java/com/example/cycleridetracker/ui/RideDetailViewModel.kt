@@ -27,6 +27,8 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 sealed interface RideDetailUiState {
     object Loading : RideDetailUiState
@@ -76,13 +78,15 @@ class RideDetailViewModel @Inject constructor(
             val newPhotos = uris.map { uri ->
                 async(Dispatchers.IO) {
                     val location = getExifLocationFromUri(uri)
+                    val timestamp = getExifTimestampFromUri(uri) ?: System.currentTimeMillis()
                     val savedUri = saveImageToInternalStorage(uri)
                     
                     if (savedUri != null) {
                         com.example.cycleridetracker.data.RidePhoto(
                             uri = savedUri.toString(),
                             latitude = location?.first,
-                            longitude = location?.second
+                            longitude = location?.second,
+                            timestamp = timestamp
                         )
                     } else null
                 }
@@ -160,6 +164,35 @@ class RideDetailViewModel @Inject constructor(
             Log.e("EXIF_FLOW", "Error in getExifLocationFromUri: ${e.message}")
         }
         return null
+    }
+
+    private fun getExifTimestampFromUri(uri: Uri): Long? {
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = ExifInterface(inputStream)
+                val dateTime = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                    ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
+                
+                if (dateTime != null) {
+                    val format = SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.getDefault())
+                    format.parse(dateTime)?.time
+                } else {
+                    // Fallback to MediaStore if it's a content URI
+                    if (uri.scheme == "content") {
+                        val projection = arrayOf(MediaStore.Images.Media.DATE_TAKEN)
+                        context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val dateIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
+                                cursor.getLong(dateIndex)
+                            } else null
+                        }
+                    } else null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("EXIF_FLOW", "Error getting timestamp from URI $uri: ${e.message}")
+            null
+        }
     }
 
     private fun readExifLocation(uri: Uri): Pair<Double, Double>? {
